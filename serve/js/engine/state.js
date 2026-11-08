@@ -22,7 +22,7 @@ const dayKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.g
 
 const fresh = () => ({
   credits: 800, thread: 120,
-  level: 1, xp: 0, spentUSD: 0,
+  level: 1, xp: 0, spentUSD: 0, receipts: [], playerId: null,
   shop: { daily: null, refills: { day: null, n: 0 }, fabrics: { day: null, n: 0 }, monthly: null, monthlyClaimed: null, firstBuy: {}, signin: { last: null, streak: 0 }, gifts: {} },
   runs: { day: null, byLevel: {} }, tickets: 0,
   owned: [...STARTER_IDS],
@@ -526,4 +526,9 @@ export function styleDNA() {
 
 export function setAvatar(patch) { S.avatar = { ...S.avatar, ...patch }; save(); }
 export function markSeen(k) { S.seen[k] = true; save(); }
+// real purchases: one receipt per Stripe Checkout Session, never redeemed twice
+export const receipts = () => S.receipts || [];
+export function recordReceipt(r) { S.receipts = S.receipts || []; if (S.receipts.some((x) => x.id === r.id)) return false; S.receipts.push(r); save(); return true; }
+export function playerId() { if (!S.playerId) { S.playerId = 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); save(); } return S.playerId; }
+export function grantThread(n, usd = 0) { S.thread += n; S.spentUSD += usd; save(); }
 export { COLORWAYS, PRINTS };

@@ -11,6 +11,7 @@ import { renderLook } from '../render/figure.js';
 import { icon } from './icons.js';
 import { OBJ } from './objects.js';
 import { track } from '../engine/track.js';
+import { paymentsMode, paymentsEnv, startCheckout, skuFor, purchaseHistory } from '../engine/payments.js';
 
 let tab = 'today';
 let lastPull = null;
@@ -120,7 +121,7 @@ function threadView(s) {
     <p class="muted small">Every tier doubles on your first purchase. Once. It never resets.</p>
     <div class="tiers">${(() => { const bestId = THREAD_TIERS.reduce((b, t) => (t.thread / t.usd > b.thread / b.usd ? t : b)).id; return THREAD_TIERS.map((t, i) => { const first = !s.shop.firstBuy[t.id]; const got = first ? t.thread * 2 : t.thread; return `<button class="tier ${first ? 'first' : ''} ${t.id === bestId ? 'best' : ''}" data-shop-buy="thread:${t.id}">${t.id === bestId ? '<span class="ribbon">Best rate</span>' : first ? '<span class="ribbon two">2× first time</span>' : ''}${OBJ.spool(28 + i * 5)}<b class="num">${fmt(got)}</b>${first ? `<span class="was num">${fmt(t.thread)} + ${fmt(t.thread)} bonus</span>` : `<span class="was">≈ ${Math.floor(got / CAPSULE.price)} capsule pulls</span>`}<span class="price">${USD(t.usd)}</span></button>`; }).join(''); })()}</div>
   </section>
-  <section class="panel"><div class="panel-title">${icon('info')} About payments in this prototype</div><p class="muted small">Buy adds the Thread and records the price so the pacing is real. No card, no charge. Recorded so far: ${USD(spentUSD())}.</p></section>`;
+  ${paymentsMode() === 'prototype' ? `<section class="panel"><div class="panel-title">${icon('info')} About payments in this prototype</div><p class="muted small">Buy adds the Thread and records the price so the pacing is real. No card, no charge. Recorded so far: ${USD(spentUSD())}.</p></section>` : `<section class="panel"><div class="panel-title">${icon('info')} Payments</div><p class="muted small">Checkout is handled by Stripe${paymentsEnv() === 'test' ? ' in test mode: nothing is really charged yet' : ''}. Receipts go to the email you give Stripe. Purchases are added the moment you come back; if one is missing, write to support with the receipt.</p>${purchaseHistory().length ? `<ul class="receipts">${purchaseHistory().slice(0, 6).map((r) => `<li><span>${esc(new Date(r.at).toLocaleDateString())}</span><span>${esc(r.sku.startsWith('t') ? 'Thread' : r.sku === 'daily' ? 'Today’s edit' : 'Monthly card')}</span><span class="num">${USD(r.usd)}</span></li>`).join('')}</ul>` : ''}</section>`}`;
 }
 
 /* ---------- Energy and fabric ---------- */
@@ -214,8 +215,8 @@ function confirmSheet(key) {
     <h2 class="display display-m">${esc(d.title)}</h2>
     <ul class="notes">${d.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
     <div class="confirm-price">${d.usd != null ? USD(d.usd) : `${d.thread} ${icon('spool')} Thread`}</div>
-    ${d.usd != null ? '<p class="muted small">Prototype: nothing is charged. You receive the items and the price is recorded.</p>' : ''}
-    <div class="sheet-actions"><button class="btn primary block" data-confirm="${esc(key)}">Confirm</button><button class="btn ghost block" data-close-sheet>Not now</button></div>
+    ${d.usd != null ? (paymentsMode(skuFor(key)) === 'prototype' ? '<p class="muted small">Prototype: nothing is charged. You receive the items and the price is recorded.</p>' : `<p class="muted small">Secure checkout by Stripe: Apple Pay, Google Pay or a card. You come straight back here and the items are added.${paymentsEnv() === 'test' ? ' Test mode: no real charge; use card 4242 4242 4242 4242.' : ''}</p>`) : ''}
+    <div class="sheet-actions"><button class="btn primary block" data-confirm="${esc(key)}">${d.usd != null && paymentsMode(skuFor(key)) !== 'prototype' ? `Pay ${USD(d.usd)}` : 'Confirm'}</button><button class="btn ghost block" data-close-sheet>Not now</button></div>
   </aside></div>`;
 }
 export function offerSheet(reason = 'energy') {
@@ -262,6 +263,11 @@ function execute(key) {
   const ch = currentChapter();
   let r;
   track('purchase_attempt', { kind });
+  if (['daily', 'monthly', 'thread'].includes(kind) && paymentsMode(skuFor(key)) !== 'prototype') {
+    const btn = document.querySelector(`[data-confirm="${key}"]`); if (btn) { btn.disabled = true; btn.textContent = 'Opening Stripe…'; }
+    startCheckout(skuFor(key)).catch(() => { toast('Could not open checkout. Try again in a moment.'); closeOverlay(); });
+    return;
+  }
   if (kind === 'daily') { r = buyDailyBundle(ch.swatches); toast(r.ok ? `Today’s edit added: energy, fabric, ${DAILY_BUNDLE.thread} Thread` : 'Already bought today'); }
   else if (kind === 'monthly') { r = buyMonthly(); toast(`Monthly card active · +${MONTHLY.now} Thread`); }
   else if (kind === 'thread') { r = buyThread(id); toast(r.ok ? `+${fmt(r.amount)} Thread${r.first ? ' (first purchase doubled)' : ''}` : 'Could not buy'); }

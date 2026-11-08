@@ -867,3 +867,6 @@ main.fixed .page { height: 100%; }
 .install-nudge div { display: grid; gap: 1px; min-width: 0; } .install-nudge b { font-size: 14px; } .install-nudge span { font-size: 12.5px; color: var(--label2); }
 .install-nudge .btn.small { height: 34px; padding: 0 12px; }
 @media (max-width: 380px) { .install-nudge { grid-template-columns: auto 1fr; } .install-nudge .btn { grid-column: span 1; } }
+
+.receipts { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; }
+.receipts li { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; padding-top: 6px; border-top: .5px solid var(--sep); }

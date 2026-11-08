@@ -1,7 +1,8 @@
 // Tiny router, shell updates, shared helpers.
 import { tierOf, dimTier } from '../engine/score.js';
 import { track, captureSource, standalone, isIOS } from '../engine/track.js';
-import { state, subscribe, nextOpenLevel, DROPS, energy, ENERGY, energyEtaMin, CHAPTERS } from '../engine/state.js';
+import { handleReturn } from '../engine/payments.js';
+import { USD, state, subscribe, nextOpenLevel, DROPS, energy, ENERGY, energyEtaMin, CHAPTERS } from '../engine/state.js';
 import { HOUSES } from '../data/catalog.js';
 import { injectSprite, icon } from './icons.js';
 import { OBJ } from './objects.js';
@@ -112,5 +113,11 @@ export function init() {
   track('open', { standalone: standalone(), route: currentRoute() });
   subscribe(() => { renderWallet(); });
   renderWallet(); renderTicker(); render();
+  handleReturn().then((r) => {
+    if (!r) return;
+    renderWallet(); renderTicker(); rerender();
+    if (r.cancelled) { toast('Checkout cancelled. Nothing was charged.'); return; }
+    overlay(`<div class="sheet-wrap" role="dialog" aria-label="Purchase"><div class="scrim" data-close-sheet></div><aside class="sheet confirm"><button class="close" data-close-sheet>Close ×</button><div class="eyebrow">${r.ok ? 'Thank you' : 'Purchase'}</div><h2 class="display display-m">${r.ok ? (r.repeat ? 'Already added' : 'Added to your wallet') : 'Not added'}</h2><p>${esc(r.text || '')}</p>${r.ok && !r.repeat && r.usd ? `<p class="muted small">${USD(r.usd)}${r.verified ? ' · confirmed by Stripe' : ''}. Your receipt is in your email.</p>` : ''}<div class="sheet-actions"><button class="btn primary block" data-close-sheet>Done</button></div></aside></div>`);
+  }).catch(() => {});
   setInterval(() => { renderTicker(); renderWallet(); }, 60000);
 }
