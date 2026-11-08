@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Serve</title>
+<meta name="description" content="Serve: a styling game where every look is judged against another stylist. Dress the brief, beat the room. Free in your browser.">
+<meta name="theme-color" content="#E0218A">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Serve">
+<!-- Open Graph: https://looksmap.github.io/serve is replaced at deploy time by dev/deploy-prep.mjs; absolute URLs are required for previews -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Serve">
+<meta property="og:description" content="A styling game where every look is judged against another stylist. Dress the brief, beat the room. Free in your browser.">
+<meta property="og:image" content="https://looksmap.github.io/serve/og.png">
+<meta property="og:url" content="https://looksmap.github.io/serve/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Serve">
+<meta name="twitter:description" content="Dress the brief, beat the room. A styling game, free in your browser.">
+<meta name="twitter:image" content="https://looksmap.github.io/serve/og.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400..600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="device" id="device">
+  <header class="bar">
+    <a class="wordmark" href="#map">Serve</a>
+    <div class="bar-mid" id="barmid"></div>
+    <div class="wallet" id="wallet"></div>
+  </header>
+  <main id="main"><div class="page" id="view"></div></main>
+  <nav class="tabs" id="nav" aria-label="Sections">
+    <a href="#map" data-route="map"><span>Chapters</span></a>
+    <a href="#studio" data-route="studio"><span>Studio</span></a>
+    <a href="#wardrobe" data-route="wardrobe"><span>Wardrobe</span></a>
+    <a href="#atelier" data-route="atelier"><span>Shop</span></a>
+    <a href="#you" data-route="you"><span>You</span></a>
+  </nav>
+  <div id="overlay"></div>
+</div>
+<script type="module" src="js/main.js"></script>
+<script>if ('serviceWorker' in navigator && location.protocol === 'https:') { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); }); }</script>
+</body>
+</html>

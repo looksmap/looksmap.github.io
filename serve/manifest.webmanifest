@@ -1,0 +1,16 @@
+{
+  "name": "Serve",
+  "short_name": "Serve",
+  "description": "A styling game where every look is judged against another stylist. Dress the brief, beat the room.",
+  "start_url": "./?utm_source=homescreen",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FFE4EF",
+  "theme_color": "#E0218A",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

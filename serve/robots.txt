@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://looksmap.github.io/serve/sitemap.xml
