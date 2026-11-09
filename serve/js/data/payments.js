@@ -5,16 +5,16 @@
 //   prototype: nothing configured, the shop grants items and records the price.
 // `payments/setup-stripe.mjs --write` fills `links` and `mode` from your Stripe account.
 export const PAYMENTS = {
-  env: 'test',            // 'test' or 'live', set by the setup script
+  env: 'live',            // 'test' or 'live', set by the setup script
   worker: '',         // e.g. 'https://serve-pay.your-account.workers.dev'
   links: {
-      "t1": "https://buy.stripe.com/test_dRmdRac0x5sCbit3T3fIs00",
-      "t2": "https://buy.stripe.com/test_dRmcN6e8Fg7gcmx1KVfIs01",
-      "t3": "https://buy.stripe.com/test_3cI00kd4Bg7gaepblvfIs02",
-      "t4": "https://buy.stripe.com/test_6oU00k4y51cm5Y99dnfIs03",
-      "t5": "https://buy.stripe.com/test_8x214od4B9IS86hgFPfIs04",
-      "t6": "https://buy.stripe.com/test_cNi9AUfcJcV40DP2OZfIs05",
-      "daily": "https://buy.stripe.com/test_aFa6oI5C9bR0bit0GRfIs06",
-      "monthly": "https://buy.stripe.com/test_eVqcN61lT2gqcmxfBLfIs07"
+      "t1": "https://buy.stripe.com/dRmdRac0x5sCbit3T3fIs00",
+      "t2": "https://buy.stripe.com/dRmcN6e8Fg7gcmx1KVfIs01",
+      "t3": "https://buy.stripe.com/3cI00kd4Bg7gaepblvfIs02",
+      "t4": "https://buy.stripe.com/6oU00k4y51cm5Y99dnfIs03",
+      "t5": "https://buy.stripe.com/8x214od4B9IS86hgFPfIs04",
+      "t6": "https://buy.stripe.com/cNi9AUfcJcV40DP2OZfIs05",
+      "daily": "https://buy.stripe.com/aFa6oI5C9bR0bit0GRfIs06",
+      "monthly": "https://buy.stripe.com/eVqcN61lT2gqcmxfBLfIs07"
   },          // { t1: 'https://buy.stripe.com/...', ..., daily: '...', monthly: '...' }
 };
