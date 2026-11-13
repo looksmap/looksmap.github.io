@@ -6,6 +6,7 @@ import { SKIN, EYES, headPath, earPaths, torsoLegsPath, armPath, facePaths, skin
 import * as G from './garments.js';
 import { hair, HAIR_COLORS } from './hair.js';
 import { material, shade, isLight } from './materials.js';
+import { bodyWarp, armWarp, warpPath, isArmLayer, HEAD_TILT } from './pose.js';
 
 export const HS = 1.22;   // head scale
 export const BS = 0.87;   // body scale
@@ -106,7 +107,8 @@ function layerSVG(l, depth) {
 
 /**
  * look: { [slot]: item }   avatar: { skin, hairStyle, hairColor, lip, eyes }
- * opts: { ghost, viewBox, width, height, shadow, toile, depth, label }
+ * opts: { ghost, viewBox, width, height, shadow, toile, depth, label, pose }
+ * pose: figures drawn with depth stand in a relaxed pose; pass 'mirror' for its mirror image or false to stand straight.
  */
 export function renderLook(look, avatar = {}, opts = {}) {
   const skin = SKIN[avatar.skin] || avatar.skin || SKIN.light;
@@ -114,10 +116,11 @@ export function renderLook(look, avatar = {}, opts = {}) {
   const mk = look.makeup?.render || {};
   const lip = mk.lip || avatar.lip || '#C4707A';
   const eye = EYES[avatar.eyes] || avatar.eyes || EYES.brown;
-  const makeup = { blush: mk.blush, shadow: mk.shadow, liner: mk.liner };
+  const makeup = { blush: mk.blush, shadow: mk.shadow, liner: mk.liner, lashes: mk.lashes, wing: mk.wing, sparkle: mk.sparkle, freckles: mk.freckles, gloss: mk.gloss };
   const ink = shade(skin, -0.66);
-  const depth = !!opts.depth && !opts.ghost;
-  const ghost = !!opts.ghost;
+  // a makeup look is shown on a face, so its thumbnail is never a ghost figure
+  const ghost = !!opts.ghost && !look.makeup;
+  const depth = !!opts.depth && !ghost;
 
   let layers = [];
   const items = Object.values(look).filter(Boolean);
@@ -127,8 +130,22 @@ export function renderLook(look, avatar = {}, opts = {}) {
     if (!look.top && !look.dress) layers.push(...G.bodice({ strap: 'tank', hem: 300, ease: 0, fill: toile, noFolds: true }).map((l) => ({ ...l, z: G.Z.top - 0.5, strokeBase: toile })));
     if (!look.bottom && !look.dress) layers.push(...G.pants({ leg: 'skinny', waist: 300, hem: 540, fly: false, fill: toile }).map((l) => ({ ...l, z: G.Z.bottom - 0.5, strokeBase: toile })));
   }
+  // pose: bend the body layers and the skin together; flats and thumbnails (no depth) stay straight
+  const posed = depth && opts.pose !== false;
+  const flip = opts.pose === 'mirror' ? -1 : 1;
+  const bw = posed ? bodyWarp(flip) : null, aw = posed ? armWarp(bw) : null;
+  const wb = posed ? (d) => warpPath(d, bw, flip > 0 ? 'b' : 'm') : (d) => d;
+  const wa = posed ? (d) => warpPath(d, aw, flip > 0 ? 'a' : 'n') : (d) => d;
+  if (posed) layers = layers.map((l) => (l.raw || !l.d ? l : { ...l, d: (isArmLayer(l.z) ? wa : wb)(l.d), maskD: l.maskD ? wb(l.maskD) : l.maskD }));
   const hairItem = look.hair;
   if (!ghost || hairItem) layers.push(...hair({ style: hairItem?.render?.style || avatar.hairStyle || 'sleekBun', color: hairItem?.color || hairColor }).map((l) => ({ ...l, head: true })));
+  const skinDark = shade(skin, -0.2);
+  const figId = `fg${(maskSeq = (maskSeq + 1) % 100000).toString(36)}`;
+  const skinOutline = (shapes) => (ghost ? '' : shapes.map((d) => `<path d="${d}" fill="none" stroke="${ink}" stroke-opacity=".6" stroke-width="2" stroke-linejoin="round"/>`).join(''));
+  // cel shading: fill with the shadow tone, then lay the lit tone over it shifted toward the light, so a hard-edged band of shadow is left along the far side
+  const skinFill = (shapes, key = 'b', dx = 6) => shapes.map((d, i) => (ghost ? `<path d="${d}" fill="rgba(18,18,18,.07)"/>` : `<clipPath id="${figId}${key}${i}"><path d="${d}"/></clipPath><path d="${d}" fill="${skinDark}"/><g clip-path="url(#${figId}${key}${i})"><path d="${d}" fill="${skin}" transform="translate(${-dx},-1)"/></g>`)).join('');
+  // In a pose the arms come forward of the body, so they are drawn after tops, skirts and dresses and just under the sleeves.
+  if (posed) [-1, 1].forEach((side, i) => { const d = wa(armPath(side)); layers.push({ z: G.Z.sleeve - 0.05, raw: `<g class="skin arm">${skinOutline([d])}${skinFill([d], `a${i}`)}</g>` }); });
   layers.sort((a, b) => a.z - b.z);
 
   const defs = new Set();
@@ -138,16 +155,14 @@ export function renderLook(look, avatar = {}, opts = {}) {
   const bodyAbove = layers.filter((l) => !l.head && l.z >= G.Z.body);
   const headAbove = layers.filter((l) => l.head && l.z >= G.Z.body);
 
-  const bodyShapes = [torsoLegsPath(), armPath(-1), armPath(1)];
-  const skinDark = shade(skin, -0.2);
-  const figId = `fg${(maskSeq = (maskSeq + 1) % 100000).toString(36)}`;
-  const skinOutline = (shapes) => (ghost ? '' : shapes.map((d) => `<path d="${d}" fill="none" stroke="${ink}" stroke-opacity=".6" stroke-width="2" stroke-linejoin="round"/>`).join(''));
-  // cel shading: fill with the shadow tone, then lay the lit tone over it shifted toward the light, so a hard-edged band of shadow is left along the far side
-  const skinFill = (shapes, key = 'b', dx = 6) => shapes.map((d, i) => (ghost ? `<path d="${d}" fill="rgba(18,18,18,.07)"/>` : `<clipPath id="${figId}${key}${i}"><path d="${d}"/></clipPath><path d="${d}" fill="${skinDark}"/><g clip-path="url(#${figId}${key}${i})"><path d="${d}" fill="${skin}" transform="translate(${-dx},-1)"/></g>`)).join('');
+  const bodyShapes = posed ? [wb(torsoLegsPath())] : [torsoLegsPath(), armPath(-1), armPath(1)];
   const skinShade = () => '';
   const headD = headPath();
   const ears = ghost ? '' : `<path d="${earPaths()}" fill="${skin}" stroke="${ink}" stroke-opacity=".45" stroke-width="1.2"/>`;
 
+  // the head follows the neck in a pose and leans a little
+  const neck = posed ? bw(CX, NB) : [CX, NB];
+  const TH = posed ? `transform="translate(${(CX + (neck[0] - CX) * BS).toFixed(1)},${(NB + OY + (neck[1] - NB) * BS).toFixed(1)}) rotate(${(HEAD_TILT * flip).toFixed(1)}) scale(${HS}) translate(${-CX},${-NB})"` : T(HS);
   const vb = opts.viewBox || FULL_VIEWBOX;
   const sizeAttr = opts.width ? ` width="${opts.width}" height="${opts.height || VIEW.h}"` : '';
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}"${sizeAttr} class="figure${ghost ? ' ghost' : ''}" role="img" aria-label="${opts.label || 'Styled figure'}" preserveAspectRatio="xMidYMid meet">
@@ -173,14 +188,14 @@ export function renderLook(look, avatar = {}, opts = {}) {
     </filter>
     ${[...defs].join('\n')}
   </defs>
-  <g ${T(HS)}>${hairBack.map((l) => layerSVG(l, depth)).join('')}</g>
+  <g ${TH}>${hairBack.map((l) => layerSVG(l, depth)).join('')}</g>
   <g ${T(BS)}>
     ${opts.shadow === false || ghost ? '' : `<ellipse cx="${CX}" cy="858" rx="88" ry="8" fill="rgba(60,10,40,.14)" filter="url(#soft)"/>`}
     ${bodyBelow.map((l) => layerSVG(l, depth)).join('')}
-    <g class="skin">${skinOutline(bodyShapes)}${skinFill(bodyShapes)}${skinShade(bodyShapes)}${ghost ? '' : bodyShading(skin)}</g>
+    <g class="skin">${skinOutline(bodyShapes)}${skinFill(bodyShapes)}${skinShade(bodyShapes)}${ghost ? '' : bodyShading(skin, wb)}</g>
     ${bodyAbove.map((l) => layerSVG(l, depth)).join('')}
   </g>
-  <g ${T(HS)}>
+  <g ${TH}>
     <g class="skin">${skinOutline([headD])}${ears}${skinFill([headD], 'h', 3.2)}${ghost ? '' : skinShading(skin)}</g>
     ${ghost ? '' : facePaths(ink, lip, eye, skin, makeup, browFor(hairItem?.color || hairColor, ink))}
     ${headAbove.map((l) => layerSVG(l, depth)).join('')}

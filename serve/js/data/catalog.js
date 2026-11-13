@@ -224,9 +224,38 @@ for (const [style, hm] of Object.entries(HAIR_META)) {
 
 // Handmade signature pieces + the procedural catalogue (bases × colourways × materials × prints) + sets.
 const built = buildCatalog(items);
-export const CATALOG = built.items;
 export const SETS = built.sets;
 export const SET_BY_ID = Object.fromEntries(built.sets.map((s) => [s.id, s]));
-export const BY_ID = Object.fromEntries(CATALOG.map((i) => [i.id, i]));
-export const STARTER_IDS = CATALOG.filter((i) => i.source === 'starter').map((i) => i.id);
-export const BY_SLOT = CATALOG.reduce((m, i) => ((m[i.slot] ||= []).push(i), m), {});
+// What the game needs before its first screen: handmade pieces, the starter wardrobe, Pim's pieces and set pieces.
+const EARLY = new Map(built.early.map((i) => [i.id, i]));
+export const STARTER_IDS = built.early.filter((i) => i.source === 'starter').map((i) => i.id);
+export const PIM_ITEMS = built.early.filter((i) => i.pim);
+
+// The rest of the catalogue (about 12,700 colour, fabric and print variants) is built the first time something reads
+// CATALOG or BY_SLOT, or looks up an id that is not an early piece. main.js also builds it shortly after the first
+// screen is drawn, so the wardrobe, the shop and scoring never wait for it. Until then the three exports below are
+// stand-ins that build the catalogue on first use; afterwards they are the plain array and objects.
+const all = [], byId = {}, bySlot = {};
+let ready = false;
+export function ensureCatalog() {
+  if (ready) return;
+  ready = true;
+  for (const i of built.finish()) { all.push(i); byId[i.id] = i; (bySlot[i.slot] ||= []).push(i); }
+  CATALOG = all; BY_ID = byId; BY_SLOT = bySlot;
+  if (typeof performance !== 'undefined' && performance.mark) performance.mark('serve:catalog');
+}
+export const catalogReady = () => ready;
+const onFirstUse = (target) => new Proxy(target, {
+  get(t, k, r) { ensureCatalog(); return Reflect.get(t, k, r); },
+  has(t, k) { ensureCatalog(); return Reflect.has(t, k); },
+  ownKeys(t) { ensureCatalog(); return Reflect.ownKeys(t); },
+  getOwnPropertyDescriptor(t, k) { ensureCatalog(); return Reflect.getOwnPropertyDescriptor(t, k); },
+});
+export let CATALOG = onFirstUse(all);
+export let BY_SLOT = onFirstUse(bySlot);
+export let BY_ID = new Proxy(byId, {
+  get(t, k, r) { if (!ready && EARLY.has(k)) return EARLY.get(k); ensureCatalog(); return Reflect.get(t, k, r); },
+  has(t, k) { ensureCatalog(); return Reflect.has(t, k); },
+  ownKeys(t) { ensureCatalog(); return Reflect.ownKeys(t); },
+  getOwnPropertyDescriptor(t, k) { ensureCatalog(); return Reflect.getOwnPropertyDescriptor(t, k); },
+});

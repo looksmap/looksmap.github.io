@@ -1,7 +1,7 @@
 // Chapters are illustrated maps of levels. Clear a level to open the next; clear a chapter to open the next chapter. Themes follow the houses and the sets that drop here.
 import { C } from './palette.js';
 import { NOVELS, THEMES, genLevels } from './themes.js';
-import { CATALOG } from './catalog.js';
+import { PIM_ITEMS } from './catalog.js';
 
 const FORMAL = ['loungewear', 'casual', 'smart casual', 'polished', 'cocktail', 'formal', 'black tie'];
 
@@ -13,7 +13,7 @@ export const CHAPTERS = [
     id: 'c1', number: '01', title: 'Arrival', theme: 'The city', line: 'You’ve just arrived in the city. Nine everyday briefs teach you how styling works.', accent: C.cherry, sets: ['arrival', 'first_night', 'pitch_pub'],
     swatches: ['cotton', 'denim', 'leather'], basePass: 58, step: 2,
     levels: [
-      L('The mirror', 'Ro, at your flat', 'Every brief gives you an occasion, a mood and the weather. Put on a top, a bottom and shoes, then send your outfit to be judged.', 1, ['easy', 'fresh'], 3, [], { tutorial: true, pass: 40, credits: 100 }),
+      L('The mirror', 'Ro, at your flat', 'Every brief gives you an occasion, a vibe and the weather. Put on a top, a bottom and shoes, then send your outfit to be judged.', 1, ['easy', 'fresh'], 3, [], { tutorial: true, pass: 40, credits: 100 }),
       L('Coffee run', 'The café on the corner, 8:40am', 'A quick walk to the coffee shop on a warm morning. Keep it easy and light.', 1, ['easy', 'fresh'], 2),
       L('First day at the studio', 'HALFTONE magazine, design floor', 'A creative office where nobody wears a suit, but everyone notices shoes. Dress in a modern, relaxed way and bring a bag.', 2, ['modern', 'relaxed', 'polished'], 3, ['bag']),
       L('The landlord visits', 'Your flat', 'The landlord is deciding whether to trust you with the keys. Wear something classic, with nothing loud.', 2, ['classic', 'minimal'], 3),
@@ -144,7 +144,7 @@ export { NOVELS };
 export const chaptersOf = (novel) => CHAPTERS.filter((c) => c.novel === novel);
 
 // Pieces a later level needs are guaranteed earlier in the chapter.
-// Also: a level whose first mood word names a style (dark academia, Y2K) must be winnable with the free wardrobe,
+// Also: a level whose first vibe word names a style (dark academia, Y2K) must be winnable with the free wardrobe,
 // so the levels just before it drop pieces in that style, and gloves arrive before the level that requires them.
 const DROP_OVERRIDES = { 'c2-1': 't_polo', 'c2-2': 'b_kilt', 'c4-5': 'gl_leather', 'c5-2': 'd_tulle_wrap', 'c5-4': 't_bandeau_chrome', 'c5-7': 'b_chrome_pleat', 'c5-5': 't_baby_tee', 'c5-6': 'b_baggy', 'c3-3': 'set.after_dark.gown', 'c3-5': 'set.after_dark.strappy', 'c3-6': 'set.after_dark.clutch', 'c3-1': 'set.le_smoking.smokingjacket', 'c7-1': 'set.fairy_grunge.mesh', 'c7-2': 'set.fairy_grunge.combat', 'c5-1': 'set.shell_system.parka', 'c6-3': 'set.sunday_boho.prairie', 'c8-3': 'set.haute_street.microskirt' };
 // Build runtime level objects: ids, pass marks, rewards, drops (filled by the catalogue layer).
@@ -160,7 +160,7 @@ export function buildLevels(sets) {
       const score = (i) => (i.aesthetics?.[ch.aes[0]] || 0) * 2 + (i.aesthetics?.[ch.aes[1]] || 0) + (i.rarity === 'edit' ? 0.4 : i.rarity === 'archive' ? 0.8 : i.rarity === 'icon' ? 1 : 0);
       const taken = new Set();
       ch.pimDrops = want.map((slot, k) => {
-        const cands = CATALOG.filter((i) => i.pim && !i.set && i.slot === slot && i.rarity !== 'core' && i.source !== 'starter' && !taken.has(i.base)).sort((a, b) => score(b) - score(a) || (hash(a.id + ch.id) % 97) - (hash(b.id + ch.id) % 97));
+        const cands = PIM_ITEMS.filter((i) => !i.set && i.slot === slot && i.rarity !== 'core' && i.source !== 'starter' && !taken.has(i.base)).sort((a, b) => score(b) - score(a) || (hash(a.id + ch.id) % 97) - (hash(b.id + ch.id) % 97));
         const it = cands[(ch.global + k) % Math.max(1, Math.min(4, cands.length))] || cands[0];
         if (it) taken.add(it.base);
         return it?.id || null;

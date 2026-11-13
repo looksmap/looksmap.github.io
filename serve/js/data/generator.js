@@ -397,16 +397,23 @@ export const BASES = [
   { id: 'heartglasses', slot: 'eyes', name: 'Heart Sunglasses', house: 'ARCHIVE', render: { kind: 'eyewear', type: 'oval', lens: 'rgba(240,120,180,.55)' }, formality: 1, weight: 1, statement: 1, aes: { y2k: .5, coquette: .5 }, colors: ['hotPink', 'babyPink', 'cherry', 'white', 'black', 'butter'], materials: ['latex'], prints: [], price: 80 },
   { id: 'bowbelt', slot: 'belt', name: 'Bow Belt', house: 'AURA', render: { kind: 'belt', buckle: '#D9D4C7' }, formality: 3, weight: 1, sharp: true, aes: { coquette: .6, quiet: .2, siren: .2 }, colors: ['black', 'babyPink', 'hotPink', 'white', 'cherry', 'bone', 'lavender'], materials: ['satin', 'velvet', 'leather'], prints: ['polka'], price: 90 },
   /* MAKEUP (changes the face; rendered through the avatar) */
-  { id: 'lip_soft', slot: 'makeup', name: 'Soft Lip', house: 'AURA', render: { kind: 'makeup', lip: '#C4707A' }, formality: 2, weight: 1, aes: { clean: .5, coquette: .3, quiet: .2 }, colors: ['babyPink'], materials: ['cotton'], prints: [], price: 40, fixed: true },
+  { id: 'lip_soft', slot: 'makeup', name: 'Soft Lip', house: 'AURA', render: { kind: 'makeup', lip: '#C4707A' }, formality: 2, weight: 1, aes: { clean: .5, coquette: .3, quiet: .2 }, colors: ['babyPink'], materials: ['cotton'], prints: [], price: 40, fixed: true, starter: true },
   { id: 'lip_cherry', slot: 'makeup', name: 'Cherry Lip', house: 'SOLENE', render: { kind: 'makeup', lip: '#A3162B', liner: '#2A1A14' }, formality: 4, weight: 1, aes: { mob: .4, siren: .4, quiet: .2 }, colors: ['cherry'], materials: ['cotton'], prints: [], price: 60, fixed: true },
   { id: 'lip_nude', slot: 'makeup', name: 'Nude Lip', house: 'NUL', render: { kind: 'makeup', lip: '#C99A86' }, formality: 2, weight: 1, aes: { clean: .5, quiet: .5 }, colors: ['camel'], materials: ['cotton'], prints: [], price: 40, fixed: true },
   { id: 'lip_berry', slot: 'makeup', name: 'Berry Lip', house: 'THORNE', render: { kind: 'makeup', lip: '#6E1F3A', shadow: 'rgba(90,40,60,.35)' }, formality: 3, weight: 1, aes: { academia: .4, sleaze: .3, mob: .3 }, colors: ['burgundy'], materials: ['cotton'], prints: [], price: 60, fixed: true },
-  { id: 'lip_gloss', slot: 'makeup', name: 'Glass Gloss', house: 'ARCHIVE', render: { kind: 'makeup', lip: '#E39DB6', blush: 'rgba(240,120,140,.3)' }, formality: 2, weight: 1, aes: { y2k: .5, coquette: .3, clean: .2 }, colors: ['rose'], materials: ['cotton'], prints: [], price: 50, fixed: true },
+  { id: 'lip_gloss', slot: 'makeup', name: 'Glass Gloss', house: 'ARCHIVE', render: { kind: 'makeup', lip: '#E39DB6', blush: 'rgba(240,120,140,.3)', gloss: true }, formality: 2, weight: 1, aes: { y2k: .5, coquette: .3, clean: .2 }, colors: ['rose'], materials: ['cotton'], prints: [], price: 50, fixed: true, starter: true },
   { id: 'eye_smoke', slot: 'makeup', name: 'Smoky Eye', house: 'OXIDE', render: { kind: 'makeup', lip: '#B98B86', shadow: 'rgba(40,32,36,.5)', liner: '#120E0C' }, formality: 3, weight: 1, aes: { sleaze: .5, siren: .3, mob: .2 }, colors: ['charcoal'], materials: ['cotton'], prints: [], price: 70, fixed: true },
   { id: 'eye_lavender', slot: 'makeup', name: 'Lavender Lid', house: 'AURA', render: { kind: 'makeup', lip: '#D08A9A', shadow: 'rgba(170,150,220,.45)' }, formality: 2, weight: 1, aes: { coquette: .4, ballet: .3, fairy: .3 }, colors: ['lavender'], materials: ['cotton'], prints: [], price: 60, fixed: true },
   { id: 'eye_chrome', slot: 'makeup', name: 'Chrome Lid', house: 'KORI', render: { kind: 'makeup', lip: '#B5A6A3', shadow: 'rgba(200,205,212,.6)', liner: '#2A2C33' }, formality: 3, weight: 1, aes: { chrome: .7, y2k: .3 }, colors: ['chrome'], materials: ['cotton'], prints: [], price: 80, fixed: true },
-  { id: 'blush_doll', slot: 'makeup', name: 'Doll Blush', house: 'AURA', render: { kind: 'makeup', lip: '#D4747F', blush: 'rgba(235,110,120,.42)' }, formality: 2, weight: 1, aes: { coquette: .6, ballet: .4 }, colors: ['babyPink'], materials: ['cotton'], prints: [], price: 50, fixed: true },
+  { id: 'blush_doll', slot: 'makeup', name: 'Doll Blush', house: 'AURA', render: { kind: 'makeup', lip: '#D4747F', blush: 'rgba(235,110,120,.6)', lashes: true }, formality: 2, weight: 1, aes: { coquette: .6, ballet: .4 }, colors: ['babyPink'], materials: ['cotton'], prints: [], price: 50, fixed: true, starter: true },
   { id: 'eye_gold', slot: 'makeup', name: 'Gold Lid', house: 'SOLENE', render: { kind: 'makeup', lip: '#B4535C', shadow: 'rgba(205,170,90,.55)' }, formality: 4, weight: 1, aes: { mob: .5, siren: .3, boho: .2 }, colors: ['gold'], materials: ['cotton'], prints: [], price: 80, fixed: true },
+  /* full makeup looks: lip, cheek and eye together. `starter: true` ones are in the wardrobe from the first level. */
+  { id: 'look_fresh', slot: 'makeup', name: 'Fresh Face', house: 'NUL', render: { kind: 'makeup', lip: '#E08A98', blush: 'rgba(255,150,160,.5)', freckles: true }, formality: 1, weight: 1, aes: { clean: .5, boho: .3, coquette: .2 }, colors: ['rose'], materials: ['cotton'], prints: [], price: 60, fixed: true, starter: true },
+  { id: 'look_peach', slot: 'makeup', name: 'Peach Glow', house: 'WILD', render: { kind: 'makeup', lip: '#F08F7A', blush: 'rgba(255,160,120,.55)', shadow: 'rgba(255,186,140,.55)' }, formality: 2, weight: 1, aes: { boho: .4, clean: .3, coquette: .3 }, colors: ['coral'], materials: ['cotton'], prints: [], price: 80, fixed: true },
+  { id: 'look_ballet', slot: 'makeup', name: 'Ballet Pink', house: 'AURA', render: { kind: 'makeup', lip: '#EFA3B8', blush: 'rgba(250,150,180,.55)', shadow: 'rgba(250,196,214,.65)', lashes: true }, formality: 2, weight: 1, aes: { ballet: .6, coquette: .4 }, colors: ['babyPink'], materials: ['cotton'], prints: [], price: 80, fixed: true },
+  { id: 'look_idol', slot: 'makeup', name: 'Idol Sparkle', house: 'ARCHIVE', render: { kind: 'makeup', lip: '#F06BAE', blush: 'rgba(255,120,170,.55)', shadow: 'rgba(255,150,205,.6)', sparkle: '#FFD75E', lashes: true, gloss: true }, formality: 2, weight: 1, statement: 1, aes: { y2k: .4, coquette: .4, chrome: .2 }, colors: ['hotPink'], materials: ['cotton'], prints: [], price: 120, fixed: true },
+  { id: 'look_cateye', slot: 'makeup', name: 'Cat-eye Liner', house: 'VESPER', render: { kind: 'makeup', lip: '#B4535C', liner: '#17100F', wing: true, lashes: true }, formality: 3, weight: 1, sharp: true, aes: { siren: .5, mob: .3, sleaze: .2 }, colors: ['black'], materials: ['cotton'], prints: [], price: 90, fixed: true },
+  { id: 'look_gothrose', slot: 'makeup', name: 'Gothic Rose', house: 'OXIDE', render: { kind: 'makeup', lip: '#4A1024', shadow: 'rgba(80,30,70,.6)', liner: '#120E0C', wing: true }, formality: 3, weight: 1, aes: { fairy: .5, sleaze: .3, academia: .2 }, colors: ['plum'], materials: ['cotton'], prints: [], price: 100, fixed: true },
 ];
 
 /* ---------------- Pim's wardrobe (chihuahua sizes) ---------------- */
@@ -597,22 +604,32 @@ export function secretSetDefs() {
   return defs;
 }
 
-export function buildCatalog(handmade = []) {
-  const items = [...handmade];
-  const sets = [];
-  // 1) variants from bases
-  for (const base of [...BASES, ...PIM_BASES]) {
-    if (base.fixed) { items.push(buildVariant(base, base.colors[0], 'cotton', null, { id: `mk.${base.id}`, rarity: 'edit' })); continue; }
-    const mats = base.materials.length ? base.materials : ['cotton'];
-    for (const cwKey of [...new Set(base.colors)]) {
-      for (const matKey of mats) {
-        if (base.forcePrint) { for (const p of base.prints) items.push(buildVariant(base, cwKey, matKey, p)); continue; }
-        items.push(buildVariant(base, cwKey, matKey, null, base.starter === `${cwKey}.${matKey}` ? { source: 'starter', rarity: 'core' } : {}));
-        // prints on a subset: first two materials only, and not on metallics
-        if (mats.indexOf(matKey) < 2 && !METALS.includes(cwKey)) for (const p of base.prints) items.push(buildVariant(base, cwKey, matKey, p));
-      }
+// Every variant of one base, in catalogue order: visit(colourway, material, print, options).
+function eachVariant(base, visit) {
+  if (base.fixed) { visit(base.colors[0], 'cotton', null, base.starter ? { id: `mk.${base.id}`, rarity: 'core', source: 'starter' } : { id: `mk.${base.id}`, rarity: 'edit' }); return; }
+  const mats = base.materials.length ? base.materials : ['cotton'];
+  for (const cwKey of [...new Set(base.colors)]) {
+    for (const matKey of mats) {
+      if (base.forcePrint) { for (const p of base.prints) visit(cwKey, matKey, p, {}); continue; }
+      visit(cwKey, matKey, null, base.starter === `${cwKey}.${matKey}` ? { source: 'starter', rarity: 'core' } : {});
+      // prints on a subset: first two materials only, and not on metallics
+      if (mats.indexOf(matKey) < 2 && !METALS.includes(cwKey)) for (const p of base.prints) visit(cwKey, matKey, p, {});
     }
   }
+}
+
+// The catalogue is built in two steps so the first screen does not wait for 15,000 pieces.
+// The early step makes what the game needs to start: the starter wardrobe, Pim's pieces and every set.
+// finish() makes the rest (the model's colour, fabric and print variants) and returns the whole catalogue in its
+// usual order: handmade pieces, the model's variants, Pim's variants, then set pieces.
+export function buildCatalog(handmade = []) {
+  const sets = [];
+  // 1) variants from bases: only the starter pieces of the model's bases for now, and all of Pim's
+  const starters = new Map();
+  for (const base of BASES) if (base.starter) eachVariant(base, (cw, mat, p, o) => { if (o.source === 'starter') starters.set(`${base.id}.${cw}.${mat}`, buildVariant(base, cw, mat, p, o)); });
+  const pimItems = [];
+  for (const base of PIM_BASES) eachVariant(base, (cw, mat, p, o) => pimItems.push(buildVariant(base, cw, mat, p, o)));
+  const setItems = [];
   // 2) sets: coordinated pieces built from bases with the set's colourway/material; pieces get their own ids
   for (const def of [...SET_DEFS, ...secretSetDefs()]) {
     const pieces = [];
@@ -625,17 +642,24 @@ export function buildCatalog(handmade = []) {
       const it = buildVariant(base, cwKey, matKey, printKey, { id: `set.${def.id}.${bid}`, set: def.id, setName: true, rarity: def.secret ? 'icon' : 'archive', source: `set:${def.id}` });
       it.name = `${def.name} ${base.name}`;
       it.price = Math.round(it.price * 1.4 / 10) * 10;
-      pieces.push(it); items.push(it);
+      pieces.push(it); setItems.push(it);
     }
     // the set's hair: part of the look, dropped and bought like any other piece
     if (def.hairStyle && HAIR_META[def.hairStyle]) {
       const hm = HAIR_META[def.hairStyle];
       const hairItem = { id: `set.${def.id}.hair`, slot: 'hair', name: `${def.name} ${hm.name}`, house: def.house, color: null, colors: [], render: { kind: 'hair', style: def.hairStyle }, formality: hm.formality, weight: 1, texture: 'hair', sharp: !!hm.sharp, statement: 0, aesthetics: hm.aes, set: def.id, setName: true, rarity: def.secret ? 'icon' : 'archive', source: `set:${def.id}`, price: 360, isHair: true, swatches: {}, desc: `The ${def.name} hair, styled for the set.` };
-      pieces.push(hairItem); items.push(hairItem);
+      pieces.push(hairItem); setItems.push(hairItem);
     }
     const aesTally = {};
     for (const pc of pieces) for (const [k, v] of Object.entries(pc.aesthetics || {})) aesTally[k] = (aesTally[k] || 0) + v;
     sets.push({ ...def, aes: def.aes || Object.entries(aesTally).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => k), pieceIds: pieces.map((p) => p.id), count: pieces.length });
   }
-  return { items, sets };
+  const finish = () => {
+    const all = [...handmade];
+    for (const base of BASES) eachVariant(base, (cw, mat, p, o) => all.push((o.source === 'starter' && starters.get(`${base.id}.${cw}.${mat}`)) || buildVariant(base, cw, mat, p, o)));
+    for (const it of pimItems) all.push(it);
+    for (const it of setItems) all.push(it);
+    return all;
+  };
+  return { early: [...handmade, ...starters.values(), ...pimItems, ...setItems], sets, finish };
 }

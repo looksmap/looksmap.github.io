@@ -1,10 +1,8 @@
-// App shell cache. Bump VERSION on every release; old caches are dropped on activate.
-const VERSION = 'serve-v0.10.0';
-const SHELL = ['./', './index.html', './css/app.css', './manifest.webmanifest', './js/main.js', './js/analytics.js',
-  './js/data/palette.js', './js/data/payments.js', './js/data/briefs.js', './js/data/story.js', './js/data/chapters.js', './js/data/catalog.js', './js/data/themes.js', './js/data/generator.js',
-  './js/engine/track.js', './js/engine/moods.js', './js/engine/payments.js', './js/engine/bots.js', './js/engine/color.js', './js/engine/score.js', './js/engine/state.js',
-  './js/render/rig.js', './js/render/materials.js', './js/render/body.js', './js/render/hair.js', './js/render/figure.js', './js/render/pim.js', './js/render/garments.js',
-  './js/ui/objects.js', './js/ui/thumbs.js', './js/ui/share.js', './js/ui/icons.js', './js/ui/coach.js', './js/ui/you.js', './js/ui/story.js', './js/ui/app.js', './js/ui/wardrobe.js', './js/ui/studio.js', './js/ui/mapart.js', './js/ui/map.js', './js/ui/atelier.js'];
+// App shell cache. Old caches are dropped on activate. dev/build.mjs writes the part of VERSION after the last dash
+// (a hash of the script and stylesheet), so every release gets a new cache; bump the number for a named release.
+const VERSION = 'serve-v0.10.0-83593cfd';
+// The game's modules are loaded as one built file (js/serve.bundle.js, made by dev/build.mjs).
+const SHELL = ['./', './index.html', './css/app.css', './manifest.webmanifest', './js/analytics.js', './js/serve.bundle.js'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {

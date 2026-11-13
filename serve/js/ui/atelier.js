@@ -5,7 +5,7 @@ import { SETS, REFILL_LADDER, setProgress, hydrate, state, buy, owns, item, thre
   THREAD_TIERS, DAILY_BUNDLE, MONTHLY, FABRIC_PACK, CREDIT_PACKS, GIFT_WINDOWS, SIGNIN, USD, buyThread, buyDailyBundle, dailyBundleBought, buyMonthly, monthlyActive, monthlyDaysLeft, monthlyClaimable, claimMonthly,
   refillPrice, refillsBoughtToday, refillEnergy, fabricPacksLeft, buyFabric, buyCredits, giftState, claimGift, signinState, signIn, spentUSD, energyEtaMin, fabricRuns, resetFabricRun, FABRIC_RUNS, LEVELS } from '../engine/state.js';
 import { CATALOG, SLOTS } from '../data/catalog.js';
-import { thumb } from './thumbs.js';
+import { lazyThumb } from './thumbs.js';
 import { itemDrawer, STARS } from './wardrobe.js';
 import { renderLook } from '../render/figure.js';
 import { icon } from './icons.js';
@@ -160,7 +160,7 @@ function editGrid(s) {
   const shown = items.slice(editPage * PAGE, editPage * PAGE + PAGE);
   return `<div class="filters">${['all', ...Object.keys(SLOTS)].map((k) => `<button class="chip ${editSlot === k ? 'on' : ''}" data-eslot="${k}">${k === 'all' ? 'All' : esc(SLOTS[k])}</button>`).join('')}</div>
   <div class="section"><div class="section-head"><h2>The Edit</h2><span class="mono">${fmt(items.length)} pieces · credits only</span></div>
-  <div class="tiles">${shown.map((it) => { const can = s.credits >= it.price; return `<div class="tile"><button data-shop-item="${it.id}" style="text-align:left"><div class="img">${thumb(it, s.avatar)}</div><div class="cap"><span class="name">${esc(it.name)}</span><span class="house">${esc(houseName(it.house))}</span><span class="price num">CR ${fmt(it.price)}</span></div></button><button class="btn small ${can ? 'primary' : 'ghost'}" style="margin:0 6px 8px" data-buy="${it.id}" ${can ? '' : 'disabled'}>Buy</button><span class="mark rar ${it.rarity}">${STARS[it.rarity] || '★'}</span></div>`; }).join('')}</div>
+  <div class="tiles">${shown.map((it) => { const can = s.credits >= it.price; return `<div class="tile"><button data-shop-item="${it.id}" style="text-align:left"><div class="img">${lazyThumb(it, s.avatar)}</div><div class="cap"><span class="name">${esc(it.name)}</span><span class="house">${esc(houseName(it.house))}</span><span class="price num">CR ${fmt(it.price)}</span></div></button><button class="btn small ${can ? 'primary' : 'ghost'}" style="margin:0 6px 8px" data-buy="${it.id}" ${can ? '' : 'disabled'}>Buy</button><span class="mark rar ${it.rarity}">${STARS[it.rarity] || '★'}</span></div>`; }).join('')}</div>
   ${pages > 1 ? `<div class="pager"><button class="btn small ghost" data-epage="${editPage - 1}" ${editPage === 0 ? 'disabled' : ''}>Prev</button><span class="mono">${editPage + 1} / ${pages}</span><button class="btn small ghost" data-epage="${editPage + 1}" ${editPage >= pages - 1 ? 'disabled' : ''}>Next</button></div>` : ''}</div>`;
 }
 function drops(s) {
@@ -174,7 +174,7 @@ function drops(s) {
       <div><div class="eyebrow">${esc(houseName(d.house))} · featured set</div><h2>${esc(d.title)}</h2><p class="line">${esc(d.line)}</p>
         <div class="timer"><span>Whole set <b>${d.setThread} Thread</b></span><span>Always available at this price</span></div>
         ${missing.length ? `<button class="btn primary" data-buy-set="${d.id}" ${s.thread >= setPrice ? '' : 'disabled'}>Buy the ${missing.length < d.items.length ? 'rest of the ' : ''}set · ${setPrice} ${icon('spool')}</button>` : '<span class="chip good">Set complete</span>'}</div></div>
-      <div class="items">${d.items.map((id) => { const it = item(id); const o = owns(id); const p = threadPrice(it); return `<div class="tile ${o ? 'on' : ''}"><button data-shop-item="${id}" style="text-align:left"><div class="img">${thumb(it, s.avatar)}</div><div class="cap"><span class="name">${esc(it.name)}</span><span class="price num">${o ? 'Owned' : `${p} Thread`}</span></div></button>${o ? '<span class="mark">Owned</span>' : `<button class="btn small ${s.thread >= p ? '' : 'ghost'}" style="margin:0 6px 8px" data-buy-thread="${id}" ${s.thread >= p ? '' : 'disabled'}>${p} ${icon('spool')}</button>`}</div>`; }).join('')}</div>
+      <div class="items">${d.items.map((id) => { const it = item(id); const o = owns(id); const p = threadPrice(it); return `<div class="tile ${o ? 'on' : ''}"><button data-shop-item="${id}" style="text-align:left"><div class="img">${lazyThumb(it, s.avatar)}</div><div class="cap"><span class="name">${esc(it.name)}</span><span class="price num">${o ? 'Owned' : `${p} Thread`}</span></div></button>${o ? '<span class="mark">Owned</span>' : `<button class="btn small ${s.thread >= p ? '' : 'ghost'}" style="margin:0 6px 8px" data-buy-thread="${id}" ${s.thread >= p ? '' : 'disabled'}>${p} ${icon('spool')}</button>`}</div>`; }).join('')}</div>
     </section>`;
   }).join('');
 }

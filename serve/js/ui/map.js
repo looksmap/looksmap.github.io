@@ -2,10 +2,11 @@
 // chapter's secret level and its exclusive set. The perfectionist's view: counters everywhere, nothing hidden.
 import { route, esc, fmt, houseName, navigate, toast, rerender, overlay, closeOverlay, $ } from './app.js';
 import { overall, state, CHAPTERS, NOVELS, chaptersOf, CHAPTER_BY_ID, LEVELS, MODES, chapterUnlocked, chapterCleared, levelUnlocked, modeUnlocked, levelCleared, resultOf, perfectCount, chapterPerfect, secretProgress, novelProgress, nextOpenLevel, markSeen, SET_BY_ID, setProgress, item, energy, ENERGY, fabricRuns, resetFabricRun, SWATCHES } from '../engine/state.js';
-import { thumb } from './thumbs.js';
+import { thumb, lazyThumb } from './thumbs.js';
 import { setLevel } from './studio.js';
 import { sceneSVG, coverSVG, ribbon, WORLD, pinFill } from './mapart.js';
 import { icon } from './icons.js';
+import { spline } from '../render/rig.js';
 import { MOOD_LABEL } from '../engine/moods.js';
 import { SLOTS } from '../data/catalog.js';
 import { playStory, storyFor } from './story.js';
@@ -98,7 +99,7 @@ function avatarSheet(s) {
       </div>
     </div>
     <div class="field-label" style="margin-top:12px;display:flex;gap:6px;align-items:baseline">Hairstyle <span class="muted" style="text-transform:none;letter-spacing:0">· more drop from levels</span></div>
-    <div class="tiles av-hair">${hairs.map((i) => `<button class="tile ${a.hairStyle === i.render.style ? 'on' : ''}" data-av-style="${i.render.style}"><div class="img">${thumb(i, a)}</div><div class="cap"><span class="name">${esc(i.name)}</span></div></button>`).join('')}</div>
+    <div class="tiles av-hair">${hairs.map((i) => `<button class="tile ${a.hairStyle === i.render.style ? 'on' : ''}" data-av-style="${i.render.style}"><div class="img">${lazyThumb(i, a)}</div><div class="cap"><span class="name">${esc(i.name)}</span></div></button>`).join('')}</div>
   </aside></div>`;
 }
 function openAvatar() { overlay(avatarSheet(state())); const f = $('[data-av-name]'); if (f && !state().avatar.name) f.focus(); }
@@ -133,34 +134,44 @@ function novelView(n, s) {
 
 /* ---------- a chapter: the map ---------- */
 function nodePos(i, n) {
-  const H = 120 + (n + 1) * 84;
-  const y = H - 60 - i * 84; // start at the bottom, climb up; the secret sits one slot above the last level
-  const x = 180 + Math.sin(i * 1.2 + 0.6) * 96;
+  const H = 130 + (n + 1) * 96;
+  const y = H - 64 - i * 96; // start at the bottom, climb up; the secret sits one slot above the last level
+  const x = 180 + Math.sin(i * 1.2 + 0.6) * 92;
   return { x, y, H };
 }
+// a five-pointed star, for the three mode medals under each level
+const starD = (cx, cy, r) => { let d = ''; for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + (k * Math.PI) / 5; const rr = k % 2 ? r * 0.46 : r; d += `${k ? 'L' : 'M'}${(cx + Math.cos(a) * rr).toFixed(1)},${(cy + Math.sin(a) * rr).toFixed(1)}`; } return `${d}Z`; };
+const twinkleD = (x, y, r) => `M${x},${y - r} q${r * 0.2},${r * 0.8} ${r},${r} q${-r * 0.8},${r * 0.2} ${-r},${r} q${-r * 0.2},${-r * 0.8} ${-r},${-r} q${r * 0.8},${-r * 0.2} ${r},${-r}Z`;
+// the same smooth line the ribbon follows, for the dotted centre line and the coloured progress trail
+const trailD = (points) => spline(points, false, 0.9);
 function mapView(ch, s) {
   const n = ch.levels.length;
   const pts = ch.levels.map((_, i) => nodePos(i, n));
   const secretPos = nodePos(n, n);
   const H = pts[0].H;
   const P = WORLD[ch.world] || WORLD.c1;
+  const next = ch.levels.findIndex((_, i) => !resultOf(`${ch.id}-${i + 1}`, mode)?.passed && modeUnlocked(`${ch.id}-${i + 1}`, mode));
+  const clearedTo = ch.levels.reduce((k, _, i) => (resultOf(`${ch.id}-${i + 1}`, mode)?.passed ? i : k), -1);
   const nodes = ch.levels.map((lv, i) => {
     const id = `${ch.id}-${i + 1}`;
     const unlocked = modeUnlocked(id, mode);
     const res = resultOf(id, mode);
     const p = pts[i];
     const cls = res?.passed ? 'done' : unlocked ? 'open' : 'locked';
+    const here = i === next;
     const side = p.x > 180 ? -1 : 1;
     const label = res?.passed ? res.grade : unlocked ? String(i + 1) : '';
-    const tagW = lv.title.length * 6.4 + 16;
-    return `<g class="node ${cls}" data-level="${id}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})" tabindex="${unlocked ? 0 : -1}" role="button" aria-label="${esc(lv.title)}">
-      <circle r="26" cy="-14" class="halo"/>
-      <ellipse class="pshadow" cy="6" rx="13" ry="4"/>
-      <circle class="orb" cy="-14" r="15" fill="${pinFill(ch.world, cls)}"/>
-      <ellipse class="spec" cx="-5" cy="-21" rx="5.5" ry="3" transform="rotate(-35 -5 -21)"/>
-      ${res?.passed || unlocked ? `<text class="lbl" y="-14" text-anchor="middle" dominant-baseline="central">${label}</text>` : `<use href="#i-lock" x="-7" y="-21" width="14" height="14" class="lockic"/>`}
-      <g class="tag" transform="translate(${side * 34},${-18})"><rect x="${side > 0 ? 0 : -tagW}" y="-11" width="${tagW}" height="22" rx="11"/><text x="${side > 0 ? 8 : -8}" text-anchor="${side > 0 ? 'start' : 'end'}" dominant-baseline="central">${esc(lv.title)}</text></g>
-      <g class="mdl" transform="translate(${side * 34 + (side > 0 ? 8 : -8 - 30)},6)">${['easy', 'normal', 'hard'].map((m, k) => { const r = resultOf(id, m); return `<circle cx="${k * 11 + 4}" cy="0" r="4" class="${r?.grade === 'S' ? 's' : r?.passed ? 'ok' : ''}"/>`; }).join('')}</g>
+    const tagW = lv.title.length * 6.6 + 20;
+    return `<g class="node ${cls}${here ? ' here' : ''}" data-level="${id}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})" tabindex="${unlocked ? 0 : -1}" role="button" aria-label="Level ${i + 1}: ${esc(lv.title)}${res?.passed ? `, grade ${res.grade}` : unlocked ? '' : ', locked'}">
+      <circle r="32" cy="-14" class="halo"/>
+      <ellipse class="pshadow" cy="10" rx="18" ry="5"/>
+      <circle class="rim" cy="-14" r="23"/>
+      <circle class="orb" cy="-14" r="19.5" fill="url(#gem-${cls})"/>
+      <path class="spec" d="M-13,-19 q2,-11 14,-13 q-8,5 -9,13 q-2,3 -5,0Z"/>
+      ${res?.passed || unlocked ? `<text class="lbl" y="-13" text-anchor="middle" dominant-baseline="central">${label}</text>` : `<use href="#i-lock" x="-8" y="-22" width="16" height="16" class="lockic"/>`}
+      <g class="stars">${['easy', 'normal', 'hard'].map((m, k) => { const r = resultOf(id, m); return `<path d="${starD((k - 1) * 13, 20 - Math.abs(k - 1) * 2.5, 6)}" class="${r?.grade === 'S' ? 's' : r?.passed ? 'ok' : ''}"/>`; }).join('')}</g>
+      <g class="tag" transform="translate(${side * 36},${-16})"><rect x="${side > 0 ? 0 : -tagW}" y="-13" width="${tagW}" height="26" rx="13"/><text x="${side > 0 ? 10 : -10}" text-anchor="${side > 0 ? 'start' : 'end'}" dominant-baseline="central">${esc(lv.title)}</text></g>
+      ${here ? `<g class="playhere"><g><rect x="-27" y="-76" width="54" height="26" rx="13"/><path d="M-6,-51 l6,7 l6,-7Z"/><text y="-63" text-anchor="middle" dominant-baseline="central">Play</text></g></g>` : ''}
     </g>`;
   }).join('');
   const sp = secretProgress(ch);
@@ -168,15 +179,16 @@ function mapView(ch, s) {
   const scls = sres?.passed ? 'done' : sp.unlocked ? 'open' : 'locked';
   const pc = perfectCount(ch);
   const secretNode = `<g class="node secret ${scls}" data-level="${ch.secret}" transform="translate(${secretPos.x.toFixed(1)},${secretPos.y.toFixed(1)})" tabindex="0" role="button" aria-label="Secret level">
-      <circle r="30" cy="-14" class="halo"/>
-      <ellipse class="pshadow" cy="6" rx="14" ry="4"/>
-      <circle class="orb" cy="-14" r="17" fill="${scls === 'locked' ? pinFill(ch.world, 'locked') : 'url(#secretGold)'}"/>
-      <ellipse class="spec" cx="-6" cy="-22" rx="6" ry="3.5" transform="rotate(-35 -6 -22)"/>
-      ${scls === 'locked' ? `<use href="#i-lock" x="-7" y="-21" width="14" height="14" class="lockic"/>` : `<use href="#i-star" x="-8" y="-22" width="16" height="16" class="staric"/>`}
-      <g class="tag" transform="translate(${secretPos.x > 180 ? -36 : 36},-18)"><rect x="${secretPos.x > 180 ? -118 : 0}" y="-11" width="118" height="22" rx="11"/><text x="${secretPos.x > 180 ? -8 : 8}" text-anchor="${secretPos.x > 180 ? 'end' : 'start'}" dominant-baseline="central">${scls === 'locked' ? `Secret · ${pc.have}/${pc.total}` : sres?.passed ? 'Secret · cleared' : 'Secret · open'}</text></g>
+      <circle r="34" cy="-14" class="halo"/>
+      <ellipse class="pshadow" cy="10" rx="19" ry="5"/>
+      <path class="rays" d="${Array.from({ length: 8 }, (_, k) => { const a = (k * Math.PI) / 4; return `M${(Math.cos(a) * 27).toFixed(1)},${(-14 + Math.sin(a) * 27).toFixed(1)} L${(Math.cos(a) * 34).toFixed(1)},${(-14 + Math.sin(a) * 34).toFixed(1)}`; }).join(' ')}"/>
+      <circle class="rim" cy="-14" r="24"/>
+      <circle class="orb" cy="-14" r="20.5" fill="${scls === 'locked' ? 'url(#gem-locked)' : 'url(#secretGold)'}"/>
+      <path class="spec" d="M-13,-19 q2,-11 14,-13 q-8,5 -9,13 q-2,3 -5,0Z"/>
+      ${scls === 'locked' ? `<use href="#i-lock" x="-8" y="-22" width="16" height="16" class="lockic"/>` : `<path class="staric" d="${starD(0, -14, 11)}"/>`}
+      <g class="tag" transform="translate(${secretPos.x > 180 ? -38 : 38},-16)"><rect x="${secretPos.x > 180 ? -126 : 0}" y="-13" width="126" height="26" rx="13"/><text x="${secretPos.x > 180 ? -10 : 10}" text-anchor="${secretPos.x > 180 ? 'end' : 'start'}" dominant-baseline="central">${scls === 'locked' ? `Secret · ${pc.have}/${pc.total} S` : sres?.passed ? 'Secret · cleared' : 'Secret · open'}</text></g>
     </g>`;
   const sets = ch.sets.map((id) => SET_BY_ID[id]).filter(Boolean);
-  const next = ch.levels.findIndex((_, i) => !resultOf(`${ch.id}-${i + 1}`, mode)?.passed && modeUnlocked(`${ch.id}-${i + 1}`, mode));
   const pathPts = [...pts.map((p) => [p.x, p.y - 8]), [secretPos.x, secretPos.y - 8]];
   const novel = NOVELS.find((x) => x.id === ch.novel);
   return `<section class="map" style="--accent:${P.pin || P.a};--p-ink:${P.ink}">
@@ -190,14 +202,24 @@ function mapView(ch, s) {
     <p class="map-line">${esc(ch.line)}</p>
     ${perfectMeter(ch)}
     <div class="map-frame"><svg class="map-svg" viewBox="0 0 ${W} ${H}" width="100%" aria-label="Chapter map">
-      <defs><radialGradient id="secretGold" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#FFF1B8"/><stop offset=".55" stop-color="#F0B83A"/><stop offset="1" stop-color="#A86F10"/></radialGradient></defs>
+      <defs>
+        <radialGradient id="secretGold" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#FFF6CC"/><stop offset=".55" stop-color="#FFC93C"/><stop offset="1" stop-color="#E08A00"/></radialGradient>
+        <radialGradient id="gem-done" cx=".36" cy=".28" r=".85"><stop offset="0" stop-color="#FFC4E1"/><stop offset=".5" stop-color="#FF5FA8"/><stop offset="1" stop-color="#C2187A"/></radialGradient>
+        <radialGradient id="gem-open" cx=".36" cy=".28" r=".85"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".45" stop-color="#FFB3D9"/><stop offset="1" stop-color="#FF6DB4"/></radialGradient>
+        <radialGradient id="gem-locked" cx=".36" cy=".28" r=".85"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".95"/><stop offset=".6" stop-color="#EADFFB" stop-opacity=".85"/><stop offset="1" stop-color="#C9B8EE" stop-opacity=".85"/></radialGradient>
+        <linearGradient id="trail" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#FF5FA8"/><stop offset="1" stop-color="#FFB52E"/></linearGradient>
+      </defs>
       ${sceneSVG(ch.world, W, H)}
+      <rect width="${W}" height="${H}" fill="#fff" opacity=".2"/>
       ${ribbon(pathPts, P.dark ? '#F3D9E6' : '#FFFFFF', P.pin || P.a)}
+      <path class="trail-dots" d="${trailD(pathPts)}"/>
+      ${clearedTo >= 0 ? `<path class="trail" d="${trailD(pathPts.slice(0, Math.min(pathPts.length, clearedTo + 2)))}"/>` : ''}
+      <g class="twinkles">${Array.from({ length: 16 }, (_, k) => { const x = 18 + ((k * 97 + ch.global * 31) % 324); const y = 30 + ((k * 151 + ch.global * 17) % Math.max(60, H - 60)); return `<path d="${twinkleD(x, y, 3 + (k % 3) * 1.6)}" style="animation-delay:${(k % 7) * 0.4}s"/>`; }).join('')}</g>
       ${nodes}${secretNode}
     </svg></div>
     ${next >= 0 ? `<div class="map-next"><span>${icon('pin')} Up next on ${MODES[mode].label.toLowerCase()}: <b>${esc(ch.levels[next].title)}</b></span><button class="btn small primary" data-open-level="${ch.id}-${next + 1}">Play</button></div>` : `<div class="map-next"><span>${icon('check')} ${MODES[mode].label} cleared on every level${mode !== 'hard' ? '. Try the next mode.' : '. Now go for an S on each one.'}</span></div>`}
     <div class="panel"><div class="panel-title">${icon('set')} Sets in this chapter</div>
-      <div class="set-row">${sets.map((st) => { const p = setProgress(st.id); return `<button class="set-card" data-set="${st.id}"><span class="set-thumbs">${st.pieceIds.slice(0, 3).map((id) => thumb(item(id), s.avatar)).join('')}</span><span class="set-cap"><b>${esc(st.name)}</b><span class="mono">${esc(houseName(st.house))} · ${p.have}/${p.total}</span></span></button>`; }).join('')}${(() => { const st = SET_BY_ID[`secret_${ch.id}`]; if (!st) return ''; const p = setProgress(st.id); return `<button class="set-card secret-set" data-set="${st.id}"><span class="set-thumbs">${st.pieceIds.slice(0, 3).map((id) => thumb(item(id), s.avatar)).join('')}</span><span class="set-cap"><b>${esc(st.name)}</b><span class="mono">★★★★ exclusive · ${p.have}/${p.total}</span></span></button>`; })()}</div>
+      <div class="set-row">${sets.map((st) => { const p = setProgress(st.id); return `<button class="set-card" data-set="${st.id}"><span class="set-thumbs">${st.pieceIds.slice(0, 3).map((id) => lazyThumb(item(id), s.avatar)).join('')}</span><span class="set-cap"><b>${esc(st.name)}</b><span class="mono">${esc(houseName(st.house))} · ${p.have}/${p.total}</span></span></button>`; }).join('')}${(() => { const st = SET_BY_ID[`secret_${ch.id}`]; if (!st) return ''; const p = setProgress(st.id); return `<button class="set-card secret-set" data-set="${st.id}"><span class="set-thumbs">${st.pieceIds.slice(0, 3).map((id) => lazyThumb(item(id), s.avatar)).join('')}</span><span class="set-cap"><b>${esc(st.name)}</b><span class="mono">★★★★ exclusive · ${p.have}/${p.total}</span></span></button>`; })()}</div>
     </div>
   </section>`;
 }

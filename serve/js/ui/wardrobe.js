@@ -4,7 +4,7 @@ import { LEVELS, state, inventory, item, owns, ownedCount, dye, applyPrint, rest
 import { SLOTS, AES, CATALOG, BY_SLOT } from '../data/catalog.js';
 import { renderPim, PIM_VIEWBOX } from '../render/pim.js';
 import { tierOf } from '../engine/score.js';
-import { thumb, clearThumbs } from './thumbs.js';
+import { lazyThumb, clearThumbs } from './thumbs.js';
 import { renderLook } from '../render/figure.js';
 import { setLook } from './studio.js';
 import { icon } from './icons.js';
@@ -56,7 +56,7 @@ export function itemDrawer(it, opts = {}) {
 }
 
 function tiles(list, s, extra = () => '') {
-  return `<div class="tiles">${list.map((it) => `<button class="tile ${owns(it.id) ? '' : 'ghosted'}" data-item="${it.id}"><div class="img">${thumb(it, s.avatar)}</div><div class="cap"><span class="name">${esc(it.name)}</span><span class="house">${esc(it.set ? SET_BY_ID[it.set]?.name : houseName(it.house))}</span>${extra(it)}</div><span class="mark rar ${it.set ? 'set' : it.rarity}">${it.set ? 'set ' : ''}${STARS[it.rarity] || '★'}</span>${it.dyed ? `<i class="dyed" style="background:${it.color}"></i>` : ''}${!owns(it.id) ? `<span class="mark lock">${icon('lock')}</span>` : ''}</button>`).join('')}</div>`;
+  return `<div class="tiles">${list.map((it) => `<button class="tile ${owns(it.id) ? '' : 'ghosted'}" data-item="${it.id}"><div class="img">${lazyThumb(it, s.avatar)}</div><div class="cap"><span class="name">${esc(it.name)}</span><span class="house">${esc(it.set ? SET_BY_ID[it.set]?.name : houseName(it.house))}</span>${extra(it)}</div><span class="mark rar ${it.set ? 'set' : it.rarity}">${it.set ? 'set ' : ''}${STARS[it.rarity] || '★'}</span>${it.dyed ? `<i class="dyed" style="background:${it.color}"></i>` : ''}${!owns(it.id) ? `<span class="mark lock">${icon('lock')}</span>` : ''}</button>`).join('')}</div>`;
 }
 
 function filtered(source) {
@@ -82,7 +82,7 @@ function setsView(s) {
       ${tiles(pieces, s)}
     </div>`;
   }
-  return `<div class="section"><div class="set-grid">${SETS.map((st) => { const p = setProgress(st.id); return `<button class="set-card big" data-open-set="${st.id}"><span class="set-thumbs">${st.pieceIds.slice(0, 4).map((id) => thumb(item(id), s.avatar)).join('')}</span><span class="set-cap"><b>${esc(st.name)}</b><span class="mono">${esc(houseName(st.house))} · ${p.have}/${p.total}${p.complete ? ' · complete' : ''}</span><span class="track"><i style="width:${(100 * p.have) / p.total}%"></i></span></span></button>`; }).join('')}</div></div>`;
+  return `<div class="section"><div class="set-grid">${SETS.map((st) => { const p = setProgress(st.id); return `<button class="set-card big" data-open-set="${st.id}"><span class="set-thumbs">${st.pieceIds.slice(0, 4).map((id) => lazyThumb(item(id), s.avatar)).join('')}</span><span class="set-cap"><b>${esc(st.name)}</b><span class="mono">${esc(houseName(st.house))} · ${p.have}/${p.total}${p.complete ? ' · complete' : ''}</span><span class="track"><i style="width:${(100 * p.have) / p.total}%"></i></span></span></button>`; }).join('')}</div></div>`;
 }
 
 function workshopView(s) {
@@ -96,26 +96,31 @@ function workshopView(s) {
   </div>`;
 }
 
-route('wardrobe', () => {
-  const s = state();
-  const inv = inventory();
-  const source = view === 'all' ? CATALOG : inv;
-  const list = view === 'owned' || view === 'all' ? filtered(source) : [];
+// The tiles and the pager for the Owned and Catalogue views. Typing in the search box redraws only this part.
+function results(s, inv) {
+  const list = filtered(view === 'all' ? CATALOG : inv);
   const pages = Math.max(1, Math.ceil(list.length / PAGE));
   if (page >= pages) page = pages - 1;
   const shown = list.slice(page * PAGE, page * PAGE + PAGE);
+  return `${shown.length ? tiles(shown, s, (it) => (view === 'all' && !owns(it.id) ? `<span class="price num">${it.source === 'atelier' ? `CR ${fmt(it.price)}` : it.set ? 'set drop · craft' : 'drop · craft'}</span>` : '')) : '<p class="empty">Nothing with those filters.</p>'}
+    ${pages > 1 ? `<div class="pager"><button class="btn small ghost" data-page="${page - 1}" ${page === 0 ? 'disabled' : ''}>Prev</button><span class="mono">${page + 1} / ${pages} · ${fmt(list.length)} pieces</span><button class="btn small ghost" data-page="${page + 1}" ${page >= pages - 1 ? 'disabled' : ''}>Next</button></div>` : ''}
+  `;
+}
+
+route('wardrobe', () => {
+  const s = state();
+  const inv = inventory();
   return `<div class="page-head"><h1>Wardrobe</h1><p class="sub">${ownedCount()} owned of ${fmt(CATALOG.length)} pieces</p></div>
   <div class="filters" style="border-bottom:0;padding-bottom:4px">${[['owned', 'Owned'], ['all', 'Catalogue'], ['sets', `Sets · ${SETS.length}`], ['workshop', 'Workshop'], ['looks', `Looks · ${s.looks.length}`]].map(([k, l]) => `<button class="chip ${view === k ? 'fill' : ''}" data-view="${k}">${l}</button>`).join('')}</div>
   ${view === 'owned' || view === 'all' ? `
   <div class="search"><input type="search" id="wq" placeholder="Search ${view === 'all' ? 'the catalogue' : 'your wardrobe'}: name, set, house" value="${esc(query)}" aria-label="Search"></div>
   <div class="filters">${['all', 'pim', ...Object.keys(SLOTS)].map((k) => `<button class="chip ${filterSlot === k ? 'on' : ''}" data-fslot="${k}">${k === 'all' ? 'All' : k === 'pim' ? 'Pim' : esc(SLOTS[k])}${k === 'pim' ? ` <small>${(view === 'all' ? CATALOG.filter((i) => i.pim).length : inv.filter((i) => i.pim).length)}</small>` : k !== 'all' ? ` <small>${(view === 'all' ? BY_SLOT[k]?.filter((i) => !i.pim).length : inv.filter((i) => i.slot === k && !i.pim).length) || 0}</small>` : ''}</button>`).join('')}</div>
   <div class="filters">${['all', ...Object.keys(AES)].map((k) => `<button class="chip ${filterAes === k ? 'on' : ''}" data-faes="${k}">${k === 'all' ? 'Any aesthetic' : esc(AES[k])}</button>`).join('')}</div>
-  <div class="section">${shown.length ? tiles(shown, s, (it) => (view === 'all' && !owns(it.id) ? `<span class="price num">${it.source === 'atelier' ? `CR ${fmt(it.price)}` : it.set ? 'set drop · craft' : 'drop · craft'}</span>` : '')) : '<p class="empty">Nothing with those filters.</p>'}
-    ${pages > 1 ? `<div class="pager"><button class="btn small ghost" data-page="${page - 1}" ${page === 0 ? 'disabled' : ''}>Prev</button><span class="mono">${page + 1} / ${pages} · ${fmt(list.length)} pieces</span><button class="btn small ghost" data-page="${page + 1}" ${page >= pages - 1 ? 'disabled' : ''}>Next</button></div>` : ''}
-  </div>` : view === 'sets' ? setsView(s) : view === 'workshop' ? workshopView(s) : `<div class="section">${s.looks.length ? `<div class="looks-row">${s.looks.map((l) => `<div class="look-card"><button data-load-look="${l.id}" title="Open in studio">${Object.values(hydrate(l.items)).some((i) => i.pim) ? renderPim(hydrate(l.items)) : renderLook(hydrate(l.items), s.avatar, { shadow: false })}</button><div class="cap"><span>${esc(l.name).slice(0, 16)}</span><span class="tier t-${tierOf(l.score, LEVELS[l.briefId]?.pass || 68)}">${tierOf(l.score, LEVELS[l.briefId]?.pass || 68)}</span></div><button class="chip" style="margin:0 6px 6px" data-del-look="${l.id}">Delete</button></div>`).join('')}</div>` : '<p class="empty">Save a look in the studio and it appears here.</p>'}</div>`}`;
+  <div class="section" id="wres">${results(s, inv)}</div>` : view === 'sets' ? setsView(s) : view === 'workshop' ? workshopView(s) : `<div class="section">${s.looks.length ? `<div class="looks-row">${s.looks.map((l) => `<div class="look-card"><button data-load-look="${l.id}" title="Open in studio">${Object.values(hydrate(l.items)).some((i) => i.pim) ? renderPim(hydrate(l.items)) : renderLook(hydrate(l.items), s.avatar, { shadow: false })}</button><div class="cap"><span>${esc(l.name).slice(0, 16)}</span><span class="tier t-${tierOf(l.score, LEVELS[l.briefId]?.pass || 68)}">${tierOf(l.score, LEVELS[l.briefId]?.pass || 68)}</span></div><button class="chip" style="margin:0 6px 6px" data-del-look="${l.id}">Delete</button></div>`).join('')}</div>` : '<p class="empty">Save a look in the studio and it appears here.</p>'}</div>`}`;
 });
 
-document.addEventListener('input', (e) => { if (e.target.id === 'wq') { query = e.target.value; page = 0; const pos = e.target.selectionStart; rerender(); const el = $('#wq'); if (el) { el.focus(); el.setSelectionRange(pos, pos); } } });
+// The search box stays where it is while the player types; only the results under it are redrawn.
+document.addEventListener('input', (e) => { if (e.target.id === 'wq') { query = e.target.value; page = 0; const el = $('#wres'); if (el) el.innerHTML = results(state(), inventory()); else rerender(); } });
 document.addEventListener('wardrobe:set', (e) => { view = 'sets'; openSet = e.detail; rerender(); });
 document.addEventListener('click', (e) => {
   const t = e.target;

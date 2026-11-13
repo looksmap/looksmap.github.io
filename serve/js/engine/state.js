@@ -43,7 +43,8 @@ const fresh = () => ({
 });
 
 let S = load();
-let OWNED = new Set(S.owned);
+// starter pieces are free, so a save from before a starter was added gets it now (the first makeup looks, for example)
+let OWNED = new Set([...S.owned, ...STARTER_IDS]);
 
 // False in private modes that block storage: the game still runs, but nothing is kept, so the shop refuses real purchases.
 export const storageOK = (() => { try { localStorage.setItem('serve.probe', '1'); localStorage.removeItem('serve.probe'); return true; } catch (e) { return false; } })();

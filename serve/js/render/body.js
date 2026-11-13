@@ -91,10 +91,12 @@ export function facePaths(ink, lip, eye = EYES.brown, skin = '#E0B596', makeup =
     </g>
     <path d="${lashD}" fill="${lash}"/>
     <path d="M${P(12.4, 84.6)} l${n1(s * 3.4)},-0.6 M${P(11.6, 86.6)} l${n1(s * 2.6)},0.9" stroke="${lash}" stroke-width="1.1" stroke-linecap="round"/>
+    ${makeup.wing ? `<path d="M${P(11, 85.4)} Q${P(15.4, 82.4)} ${P(20.4, 78.2)} Q${P(17, 84.4)} ${P(11.4, 87.8)}Z" fill="${lash}"/>` : ''}
+    ${makeup.lashes ? `<path d="M${P(6.4, 79.6)} l${n1(s * 2.4)},-4.2 M${P(9.4, 81)} l${n1(s * 3.4)},-3.6 M${P(2.6, 78.6)} l${n1(s * 1.2)},-3.8 M${P(8.6, 96)} l${n1(s * 2)},1.8 M${P(5.4, 97.6)} l${n1(s * 1.2)},2" stroke="${lash}" stroke-width="1.25" stroke-linecap="round"/>` : ''}
     <path d="M${P(10.6, 88.8)} C${P(10, 93.4)} ${P(6, bot + 0.5)} ${P(1.5, bot + 0.6)}" fill="none" stroke="${lash}" stroke-width="1.05" stroke-linecap="round" opacity=".7"/>
     <path d="M${P(-8, 83)} C${P(-4, top - 4.3)} ${P(5, top - 4.7)} ${P(10.6, top - 0.8)}" fill="none" stroke="${ink}" stroke-width=".9" stroke-linecap="round" opacity=".3"/>
     <path d="M${P(-9.5, 70.6)} C${P(-4, 66.8)} ${P(5, 66.1)} ${P(12.2, 69.3)}" fill="none" stroke="${browCol}" stroke-width="1.9" stroke-linecap="round" opacity=".88"/>
-    <g class="blink"><path d="${shape}" fill="${skin}" stroke="${skin}" stroke-width="5" stroke-linejoin="round"/><path d="M${P(-10.4, 90.4)} Q${P(0.5, 97.8)} ${P(12.6, 88.2)}" fill="none" stroke="${lash}" stroke-width="2.2" stroke-linecap="round"/></g>`;
+    <g class="blink" opacity="0"><path d="${shape}" fill="${skin}" stroke="${skin}" stroke-width="5" stroke-linejoin="round"/><path d="M${P(-10.4, 90.4)} Q${P(0.5, 97.8)} ${P(12.6, 88.2)}" fill="none" stroke="${lash}" stroke-width="2.2" stroke-linecap="round"/></g>`;
   };
   return `<g class="face">
     <defs>
@@ -108,7 +110,9 @@ export function facePaths(ink, lip, eye = EYES.brown, skin = '#E0B596', makeup =
     <path d="M${CX + 0.4},100.6 q2.2,2.2 0.2,3.6" fill="none" stroke="${shade(skin, -0.42)}" stroke-width="1.15" stroke-linecap="round" opacity=".6"/>
     <path d="M${CX - 4.3},115 Q${CX},120 ${CX + 4.3},115 Q${CX},116.6 ${CX - 4.3},115Z" fill="${lip}" opacity=".85"/>
     <path d="M${CX - 5.8},112.7 Q${CX - 2.6},114.7 ${CX},114 Q${CX + 2.6},114.7 ${CX + 5.8},112.7" fill="none" stroke="${shade(lip, -0.45)}" stroke-width="1.25" stroke-linecap="round"/>
-    <ellipse cx="${CX - 0.8}" cy="116.9" rx="1.6" ry=".6" fill="#fff" opacity=".6"/>
+    <ellipse cx="${CX - 0.8}" cy="116.9" rx="${makeup.gloss ? 2.6 : 1.6}" ry="${makeup.gloss ? 1 : 0.6}" fill="#fff" opacity="${makeup.gloss ? 0.85 : 0.6}"/>
+    ${makeup.freckles ? `<path d="${[[-13, 99.4], [-9.6, 101.4], [-16.4, 101.6], [-6.4, 99.2], [13, 99.4], [9.6, 101.4], [16.4, 101.6], [6.4, 99.2], [-2.6, 97.6], [2.6, 97.6]].map(([dx, y]) => `M${CX + dx},${y} h.01`).join(' ')}" stroke="${shade(skin, -0.42)}" stroke-width="1.5" stroke-linecap="round" opacity=".55"/>` : ''}
+    ${makeup.sparkle ? [[-27, 98.4, 2.6], [-22.4, 101.6, 1.5], [27, 98.4, 2.6], [22.4, 101.6, 1.5], [-31.4, 93.6, 1.3], [31.4, 93.6, 1.3]].map(([dx, y, r]) => `<path d="M${CX + dx},${n1(y - r)} q${n1(r * 0.24)},${n1(r * 0.76)} ${r},${r} q${n1(-r * 0.76)},${n1(r * 0.24)} ${-r},${r} q${n1(-r * 0.24)},${n1(-r * 0.76)} ${-r},${-r} q${n1(r * 0.76)},${n1(-r * 0.24)} ${r},${-r}Z" fill="${makeup.sparkle}" stroke="#fff" stroke-width=".4"/>`).join('') : ''}
   </g>`;
 }
 
@@ -120,14 +124,15 @@ export function skinShading(skin) {
     <path d="M${CX - 37},95 q1.5,4 0.5,8 M${CX + 37},95 q-1.5,4 -0.5,8" fill="none" stroke="${dark}" stroke-width=".9" stroke-linecap="round" opacity=".4"/>
   </g>`;
 }
-export function bodyShading(skin) {
+// Lines and highlights on the body. `w` warps a path into the current pose (identity when the figure stands straight).
+export function bodyShading(skin, w = (d) => d) {
   const dark = shade(skin, -0.5);
+  const line = (d, o, sw = 1.1) => `<path d="${w(d)}" fill="none" stroke="${dark}" stroke-width="${sw}" stroke-linecap="round" opacity="${o}"/>`;
+  const glow = (x) => `<path d="${w(`M${x},584 C${x - 3},610 ${x - 3},670 ${x},700 C${x + 3},670 ${x + 3},610 ${x},584Z`)}" fill="#fff" opacity=".16"/>`;
   return `<g class="bodyShade">
-    <path d="M${CX - 26},160 q11,6 22,2" fill="none" stroke="${dark}" stroke-width="1.1" stroke-linecap="round" opacity=".28"/>
-    <path d="M${CX + 4},162 q11,4 22,-2" fill="none" stroke="${dark}" stroke-width="1.1" stroke-linecap="round" opacity=".28"/>
-    <path d="M${CX - 30},578 q5,6 10,1 M${CX + 20},578 q5,6 10,1" fill="none" stroke="${dark}" stroke-width="1" stroke-linecap="round" opacity=".22"/>
-    <ellipse cx="${CX - 30}" cy="640" rx="3" ry="62" fill="#fff" opacity=".14"/>
-    <ellipse cx="${CX + 22}" cy="640" rx="3" ry="62" fill="#fff" opacity=".14"/>
+    ${line(`M${CX - 26},160 q11,6 22,2`, 0.28)}${line(`M${CX + 4},162 q11,4 22,-2`, 0.28)}
+    ${line(`M${CX - 30},578 q5,6 10,1`, 0.22, 1)}${line(`M${CX + 20},578 q5,6 10,1`, 0.22, 1)}
+    ${glow(CX - 30)}${glow(CX + 22)}
   </g>`;
 }
 

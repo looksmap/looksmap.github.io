@@ -7,15 +7,15 @@ const slotWord = (s) => (s === 'outer' ? 'a coat or jacket' : s === 'shoes' ? 's
 import { bridgeOf, AES } from '../data/catalog.js';
 
 export const DIMS = [
-  { key: 'brief', label: 'Brief fit', max: 20 },
-  { key: 'palette', label: 'Palette', max: 15 },
-  { key: 'silhouette', label: 'Silhouette', max: 12 },
-  { key: 'formality', label: 'Formality', max: 12 },
-  { key: 'season', label: 'Season', max: 8 },
-  { key: 'texture', label: 'Texture', max: 7 },
-  { key: 'focal', label: 'Focal point', max: 8 },
-  { key: 'complete', label: 'Completeness', max: 8 },
-  { key: 'aesthetic', label: 'Aesthetic', max: 10 },
+  { key: 'brief', label: 'Brief', max: 20 },
+  { key: 'palette', label: 'Colours', max: 15 },
+  { key: 'silhouette', label: 'Shape', max: 12 },
+  { key: 'formality', label: 'Dress code', max: 12 },
+  { key: 'season', label: 'Weather', max: 8 },
+  { key: 'texture', label: 'Fabrics', max: 7 },
+  { key: 'focal', label: 'Star piece', max: 8 },
+  { key: 'complete', label: 'Finish', max: 8 },
+  { key: 'aesthetic', label: 'Style', max: 10 },
 ];
 
 const AREA = { dress: 3, outer: 2.6, bottom: 2, top: 1.6, shoes: 0.7, bag: 0.5, hosiery: 0.5, head: 0.4, hairAcc: 0.15, scarf: 0.5, gloves: 0.3, belt: 0.2, neck: 0.15, bracelet: 0.08, ears: 0.1, eyes: 0.1, handheld: 0.2, makeup: 0.05, hair: 0 };
@@ -94,7 +94,7 @@ function buildContext(look, brief) {
 // One short line per dimension when it scores well or badly. Picked by a hash of the look so the same outfit always
 // gets the same line. Every line has to be true for any outfit with that score, so none of them names a garment.
 const CRIT_GOOD = {
-  brief: ['This outfit suits the occasion.', 'You followed the brief closely.', 'This is right for where you’re going.', 'The mood words come through clearly.', 'You gave the client what they asked for.', 'This answers the brief well.'],
+  brief: ['This outfit suits the occasion.', 'You followed the brief closely.', 'This is right for where you’re going.', 'The vibe words come through clearly.', 'You gave the client what they asked for.', 'This answers the brief well.'],
   palette: ['The colours go well together.', 'The colours are well balanced.', 'These colours suit each other.', 'Nice colour choices.', 'The colours look planned.', 'The colours work as a set.'],
   silhouette: ['The shape of the outfit is balanced.', 'The proportions look good.', 'The outfit has a clear shape.', 'The fit and the shape work well.', 'The outline looks neat from head to toe.', 'The shapes suit each other.'],
   formality: ['Every piece is equally dressy.', 'The pieces match in how formal they are.', 'Nothing is too dressy or too casual for the rest.', 'The outfit is equally dressy from top to shoes.', 'The pieces all belong at the same event.', 'The level of dressiness is even.'],
@@ -105,7 +105,7 @@ const CRIT_GOOD = {
   aesthetic: ['The whole outfit follows one style.', 'Every piece fits the same style.', 'The style is clear and consistent.', 'It all looks like it belongs together.', 'The outfit has one clear idea.', 'The pieces share a style.'],
 };
 const CRIT_BAD = {
-  brief: ['This doesn’t suit the occasion yet.', 'The brief asked for something different.', 'It’s a nice outfit, but for another event.', 'Some of the mood words are missing.', 'Something doesn’t match the brief, so check it again.', 'This is close to the brief, but not quite there.'],
+  brief: ['This doesn’t suit the occasion yet.', 'The brief asked for something different.', 'It’s a nice outfit, but for another event.', 'Some of the vibe words are missing.', 'Something doesn’t match the brief, so check it again.', 'This is close to the brief, but not quite there.'],
   palette: ['The colours clash a little.', 'Too many colours are competing.', 'The colours need more balance.', 'These colours don’t quite go together.', 'Try fewer colours, or colours that are closer together.', 'The colour mix looks unplanned.'],
   silhouette: ['The shape of the outfit is unbalanced.', 'The outfit needs a clearer shape.', 'The proportions look a bit off.', 'The loose and fitted pieces aren’t balanced.', 'The outline looks heavy in one place.', 'The shapes don’t suit each other yet.'],
   formality: ['Some pieces are much dressier than others.', 'Dressy and casual pieces are mixed without a link.', 'The pieces don’t match in how formal they are.', 'The dressiness changes too much between pieces.', 'The pieces look like they’re going to different events.', 'One piece is at a different level from the rest.'],
@@ -140,7 +140,7 @@ export function scoreLook(look, brief) {
   const moodHits = moods.map((m) => ({ m, ok: MOODS[m] ? MOODS[m].test(c) : true }));
   const moodScore = moods.length ? (8 * moodHits.filter((x) => x.ok).length) / moods.length : 8;
   bf += moodScore;
-  for (const x of moodHits) if (!x.ok) bfNotes.push(`The “${MOOD_LABEL(x.m)}” mood is missing.${MOODS[x.m]?.hint ? ` Try ${MOODS[x.m].hint}.` : ''}`);
+  for (const x of moodHits) if (!x.ok) bfNotes.push(`The “${MOOD_LABEL(x.m)}” vibe is missing.${MOODS[x.m]?.hint ? ` Try ${MOODS[x.m].hint}.` : ''}`);
   const req = [...(brief.pim ? [] : ['shoes']), ...(brief.required || [])];
   const reqOk = req.every((s) => look[s]);
   bf += reqOk ? 2 : 0;
@@ -338,7 +338,7 @@ export function scoreLook(look, brief) {
   if (praise) critique.push(praise);
   if (gated === 'undressed') critique.unshift(brief.pim ? 'The outfit isn’t finished. Pim needs a top or a dress first. Until then, the score can’t go above 35.' : `The outfit isn’t finished. Add ${!look.shoes ? 'shoes' : ''}${!look.shoes && !(look.dress || (look.top && look.bottom)) ? ' and ' : ''}${!(look.dress || (look.top && look.bottom)) ? (look.top ? 'a bottom' : look.bottom ? 'a top' : 'a top and a bottom, or a dress') : ''} first. Until then, the score can’t go above 35.`);
   else if (gated === 'dresscode') critique.unshift(`This is the wrong dress code. ${brief.occasion ? `“${brief.occasion}”` : 'This brief'} is ${['loungewear', 'casual', 'smart casual', 'polished', 'cocktail', 'formal', 'black tie'][brief.formality]}, but this outfit is ${['loungewear', 'casual', 'smart casual', 'polished', 'cocktail', 'formal', 'black tie'][Math.round(c.avgFormality)]}. The score can’t go above 50 until that is fixed.`);
-  else if (gated === 'mood') critique.unshift(`${!moodHits[0].ok ? `“${MOOD_LABEL(moodHits[0].m)}” is the first mood word in the brief, and this outfit doesn’t show it` : `Some mood words are missing (${moodHits.filter((x) => !x.ok).map((x) => MOOD_LABEL(x.m)).join(', ')})`}. The score can’t go above 70 until they come through.`);
+  else if (gated === 'mood') critique.unshift(`${!moodHits[0].ok ? `“${MOOD_LABEL(moodHits[0].m)}” is the first vibe word in the brief, and this outfit doesn’t show it` : `Some vibe words are missing (${moodHits.filter((x) => !x.ok).map((x) => MOOD_LABEL(x.m)).join(', ')})`}. The score can’t go above 70 until they come through.`);
   else if (gated === 'dresscode-soft') critique.unshift('This is a good outfit, but it’s one step away from the dress code. The score can’t go above 68 until that is fixed.');
   else if (gated) critique.unshift('This is a nice outfit, but it doesn’t fit the brief. The score can’t go above 50 until it does.');
   return { total, grade, dims: dimsOut, critique, context: c, gated, lead: a1, palette: pal.template, noise, load, raw, dressed };

@@ -4,7 +4,7 @@ import { SLOTS, AES, BY_ID } from '../data/catalog.js';
 import { renderLook, SKIN, HAIR_COLORS, EYES } from '../render/figure.js';
 import { renderPim, PIM_SLOTS } from '../render/pim.js';
 import { bestSwap, GRADE_WORD, tierOf, dimTier, marginWord } from '../engine/score.js';
-import { thumb, clearThumbs } from './thumbs.js';
+import { thumb, lazyThumb, clearThumbs } from './thumbs.js';
 import { STARS } from './wardrobe.js';
 import { formalWord } from './map.js';
 import { icon, SLOT_ICON } from './icons.js';
@@ -14,13 +14,14 @@ import { startCoach, stopCoach, coachActive } from './coach.js';
 import { offerSheet, runsSheet } from './atelier.js';
 import { OBJ } from './objects.js';
 import { MOOD_LABEL } from '../engine/moods.js';
+import { playJudging } from './judging.js';
 import { markSeen } from '../engine/state.js';
 import { shareVerdict, briefLink, copyLink } from './share.js';
 import { track } from '../engine/track.js';
 import { installState, promptInstall } from './app.js';
 
 // the pieces every outfit needs come first, so they are on screen without scrolling the row
-const SLOT_ORDER = ['top', 'bottom', 'dress', 'shoes', 'outer', 'bag', 'hosiery', 'head', 'hairAcc', 'eyes', 'ears', 'neck', 'bracelet', 'belt', 'gloves', 'scarf', 'handheld', 'makeup', 'hair'];
+const SLOT_ORDER = ['top', 'bottom', 'dress', 'shoes', 'makeup', 'hair', 'outer', 'bag', 'hosiery', 'head', 'hairAcc', 'eyes', 'ears', 'neck', 'bracelet', 'belt', 'gloves', 'scarf', 'handheld'];
 let levelId = null;
 let mode = 'normal';
 let look = {};
@@ -103,7 +104,7 @@ function drawer() {
     let items = inv.filter((i) => i.slot === tab);
     if (railFilter) { const q = railFilter.toLowerCase(); items = items.filter((i) => i.name.toLowerCase().includes(q) || (SET_BY_ID[i.set]?.name || '').toLowerCase().includes(q)); }
     items.sort((a, b) => (b.set ? 1 : 0) - (a.set ? 1 : 0) || a.name.localeCompare(b.name));
-    body = `<div class="rail-tiles">${look[tab] && tab !== 'hair' ? `<button class="remove" data-unequip="${tab}">Take off</button>` : ''}${items.slice(0, 80).map((it) => `<button class="tile ${look[tab]?.id === it.id ? 'on' : ''}" data-equip="${it.id}" title="${esc(it.name)}"><div class="img">${thumb(it, s.avatar)}</div><div class="cap"><span class="name">${esc(it.name)}</span></div>${look[tab]?.id === it.id ? '<span class="mark">On</span>' : ''}<span class="mark rar ${it.set ? 'set' : it.rarity}">${STARS[it.rarity] || '★'}</span></button>`).join('')}${items.length > 80 ? `<span class="remove">+${items.length - 80} more in wardrobe</span>` : ''}${items.length ? '' : `<p class="empty">Nothing here yet. Clear levels, craft something, or visit the shop.</p>`}</div>`;
+    body = `<div class="rail-tiles">${look[tab] && tab !== 'hair' ? `<button class="remove" data-unequip="${tab}">Take off</button>` : ''}${items.slice(0, 80).map((it) => `<button class="tile ${look[tab]?.id === it.id ? 'on' : ''}" data-equip="${it.id}" title="${esc(it.name)}"><div class="img">${lazyThumb(it, s.avatar)}</div><div class="cap"><span class="name">${esc(it.name)}</span></div>${look[tab]?.id === it.id ? '<span class="mark">On</span>' : ''}<span class="mark rar ${it.set ? 'set' : it.rarity}">${STARS[it.rarity] || '★'}</span></button>`).join('')}${items.length > 80 ? `<span class="remove">+${items.length - 80} more in wardrobe</span>` : ''}${items.length ? '' : `<p class="empty">Nothing here yet. Clear levels, craft something, or visit the shop.</p>`}</div>`;
   }
   return `<div class="slot-tabs" role="tablist">${tabs}</div>${body}`;
 }
@@ -122,11 +123,45 @@ route('studio', () => {
   </div>`;
 }, { fixed: true });
 
-function refresh() {
+// keepRail: the outfit changed but the pieces on offer did not, so the rail keeps its tiles and only its marks change
+function refresh(keepRail = false) {
   const b = resolveBrief();
   const st = $('#stage'); if (st) st.innerHTML = stage(b);
   const sub = $('[data-submit]'); if (sub) sub.toggleAttribute('disabled', !worn().length);
-  const railEl = $('#rail'); if (railEl) { railEl.innerHTML = drawer(); keepTabInView(); }
+  const railEl = $('#rail'); if (!railEl) return;
+  if (keepRail && syncRail(railEl)) return;
+  railEl.innerHTML = drawer(); keepTabInView();
+}
+// Bring the rail in line with the outfit without redrawing it: the dot on each category that has something on,
+// the "On" mark on the piece being worn, and the "Take off" button. Returns false when the rail has no tiles to keep.
+function syncRail(railEl) {
+  const row = railEl.querySelector('.rail-tiles');
+  if (!row || tab === 'model') return false;
+  const s = state();
+  for (const btn of railEl.querySelectorAll('[data-tab]')) {
+    const k = btn.dataset.tab;
+    const want = !!(look[k] && (k !== 'hair' || look[k].render?.style !== s.avatar.hairStyle));
+    const dot = btn.lastElementChild?.localName === 'i' ? btn.lastElementChild : null;
+    if (want && !dot) btn.appendChild(document.createElement('i')); else if (!want && dot) dot.remove();
+  }
+  const onId = look[tab]?.id;
+  for (const tile of row.querySelectorAll('.tile[data-equip]')) {
+    const on = tile.dataset.equip === onId;
+    if (tile.classList.contains('on') === on) continue;
+    tile.classList.toggle('on', on);
+    const mark = tile.querySelector('.mark:not(.rar)');
+    if (on) { const m = document.createElement('span'); m.className = 'mark'; m.textContent = 'On'; tile.insertBefore(m, tile.querySelector('.mark.rar')); } else if (mark) mark.remove();
+  }
+  const want = !!(look[tab] && tab !== 'hair');
+  const off = row.querySelector('[data-unequip]');
+  if (want !== !!off) {
+    // when the row has been scrolled, the tiles stay where they are under the finger
+    const ref = row.querySelector('.tile'); const x = ref ? ref.offsetLeft : 0; const at = row.scrollLeft;
+    if (want) { const b = document.createElement('button'); b.className = 'remove'; b.dataset.unequip = tab; b.textContent = 'Take off'; row.insertBefore(b, row.firstChild); } else off.remove();
+    if (at > 0 && ref) row.scrollLeft = Math.max(0, at + ref.offsetLeft - x);
+  } else if (off) off.dataset.unequip = tab;
+  keepTabInView();
+  return true;
 }
 // redrawing the rail resets the category row to its start; bring the open category back into view
 function keepTabInView() { const el = $('#rail [role="tab"][aria-selected="true"]'); const row = el?.parentElement; if (el && row) row.scrollLeft = Math.max(0, el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2); }
@@ -140,7 +175,7 @@ function briefSheet(b) {
     <p class="muted" style="font-size:13.5px">${esc(b.copy)}</p>
     <div class="spec">
       <div class="row"><span class="k">Occasion</span><span class="v"><span class="chip on">${formalWord(b.formality)}</span>${b.tolerance === 0 ? '<span class="chip cherry">strict</span>' : ''}</span></div>
-      <div class="row"><span class="k">Mood</span><span class="v">${b.mood.map((m, i) => `<span class="chip ${i === 0 ? 'on' : ''}">${esc(MOOD_LABEL(m))}</span>`).join('')}</span></div>
+      <div class="row"><span class="k">Vibe</span><span class="v">${b.mood.map((m, i) => `<span class="chip ${i === 0 ? 'on' : ''}">${esc(MOOD_LABEL(m))}</span>`).join('')}</span></div>
       <div class="row"><span class="k">Weather</span><span class="v"><span class="chip">${['', 'heatwave', 'warm', 'mild', 'cold', 'freezing'][b.weather] || b.weather}</span></span></div>
       ${b.required?.length ? `<div class="row"><span class="k">Must wear</span><span class="v">${b.required.map((x) => `<span class="chip">${esc(SLOTS[x] || x)}</span>`).join('')}</span></div>` : ''}
       ${b.mustTexture ? `<div class="row"><span class="k">Include</span><span class="v"><span class="chip">${esc(b.mustTexture)}</span></span></div>` : ''}
@@ -148,7 +183,7 @@ function briefSheet(b) {
       <div class="row"><span class="k">Rival</span><span class="v"><span class="chip on">a stylist at your level</span><span class="chip num">${b.credits} credits</span>${drop ? `<span class="chip">drops ${esc(drop.name)}</span>` : ''}</span></div>
     </div>
     ${b.adapt ? `<div class="adapt"><span class="mono">${b.adapt.kind.toUpperCase()}</span> ${esc(b.adapt.text)}${b.adapt.bonus ? ` (+${b.adapt.bonus} credits)` : ''}. <a href="#you" style="text-decoration:underline">Why?</a></div>` : ''}
-    <p class="muted" style="font-size:12px">The first mood word matters most, so start with that one.</p>
+    <p class="muted" style="font-size:12px">The first vibe word matters most, so start with that one.</p>
   </aside></div>`;
 }
 
@@ -181,9 +216,9 @@ function resultsSheet(res, b) {
     ${(() => { const o = res.rewards.opponent; const m = res.rewards.margin; return `<div class="versus">
       <div class="vs-col you"><div class="vs-fig">${figure(look, s.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' })}</div><b>${esc(b.pim ? 'Your Pim' : s.avatar.name || 'You')}</b><span class="n tier t-${res.grade} ${res.passed ? '' : 'fail'}">${res.grade}</span></div>
       <div class="vs-mid"><span class="vs-word">${res.passed ? (m === 0 ? 'Tie' : 'Won') : 'Lost'}</span><span class="vs-by">${marginWord(m).replace(/^(Won|Lost) /, '')}</span><span class="stamp ${res.passed ? '' : 'no'}">${res.grade === 'S' ? 'perfect' : res.passed ? 'cleared' : 'not yet'}</span></div>
-      <div class="vs-col them"><div class="vs-fig">${figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' })}</div><b>${esc(b.pim ? `${o.bot.name}’s Pim` : o.bot.name)}</b><span class="n tier t-${tierOf(o.total, b.pass)}">${tierOf(o.total, b.pass)}</span></div>
+      <div class="vs-col them"><div class="vs-fig">${figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' })}</div><b>${esc(b.pim ? `${o.bot.name}’s Pim` : o.bot.name)}</b><span class="n tier t-${tierOf(o.total, b.pass)}">${tierOf(o.total, b.pass)}</span></div>
     </div>
-    <p class="muted small vs-note">${res.passed ? (res.firstPass ? 'Cleared. The next level is open.' : 'Cleared again. Replays pay 30% of the credits and sometimes give you a piece.') : `Beat ${esc(o.bot.name)} by a clear margin to earn an S. You still earned ${res.rewards.xp} XP for trying.`}</p>`; })()}
+    <p class="muted small vs-note">${res.passed ? (res.firstPass ? 'Cleared. The next level is open.' : b.tutorial ? 'Cleared again. The first level is for practice, so replays earn nothing.' : 'Cleared again. Replays pay 30% of the credits and sometimes give you a piece.') : `Beat ${esc(o.bot.name)} by a clear margin to earn an S. You still earned ${res.rewards.xp} XP for trying.`}</p>`; })()}
     <div class="share-row"><button class="btn small primary" data-share-verdict>${icon('camera')} Share your result</button><button class="btn small ghost" data-copy-brief>Copy brief link</button></div>
     ${installNudge(s)}
     ${res.rewards.levelUps?.length ? res.rewards.levelUps.map((u) => `<div class="levelup">${OBJ.star(40)}<div><b>Level ${u.level}</b><span>Your energy now goes up to ${u.energyMax} and has been refilled. You also earned ${u.credits} credits${u.thread ? ` and ${u.thread} Thread` : ''}.</span></div></div>`).join('') : ''}
@@ -204,9 +239,9 @@ document.addEventListener('click', (e) => {
   const t = e.target;
   if (t.closest('#stage svg.figure')) { zoom = !zoom; const st = $('#stage'); if (st) st.innerHTML = stage(resolveBrief()); return; }
   const tabBtn = t.closest('[data-tab]'); if (tabBtn) { tab = tabBtn.dataset.tab; const railEl = $('#rail'); if (railEl) { railEl.innerHTML = drawer(); keepTabInView(); } return; }
-  const eq = t.closest('[data-equip]'); if (eq) { equip(item(eq.dataset.equip)); refresh(); return; }
-  const un = t.closest('[data-unequip]'); if (un) { delete look[un.dataset.unequip]; refresh(); return; }
-  if (t.closest('[data-clear]')) { look = defaultLook(); refresh(); return; }
+  const eq = t.closest('[data-equip]'); if (eq) { equip(item(eq.dataset.equip)); refresh(true); return; }
+  const un = t.closest('[data-unequip]'); if (un) { delete look[un.dataset.unequip]; refresh(true); return; }
+  if (t.closest('[data-clear]')) { look = defaultLook(); refresh(true); return; }
   const sk = t.closest('[data-skin]'); if (sk) { setAvatar({ skin: sk.dataset.skin }); clearThumbs(); refresh(); return; }
   const hc = t.closest('[data-haircolor]'); if (hc) { setAvatar({ hairColor: hc.dataset.haircolor }); clearThumbs(); refresh(); return; }
   const ey = t.closest('[data-eyes]'); if (ey) { setAvatar({ eyes: ey.dataset.eyes }); refresh(); return; }
@@ -219,12 +254,17 @@ document.addEventListener('click', (e) => {
     if (!res.ok) { if (res.reason === 'energy') overlay(offerSheet('energy')); else if (res.reason === 'attempts') overlay(runsSheet(b.id)); else if (res.reason === 'locked') { toast('That level is not open yet'); navigate('#map'); } else toast('That didn’t go through. Tap again.'); return; }
     if (coachActive()) { stopCoach(); markSeen('coach'); }
     if (look.hair) setAvatar({ hairStyle: look.hair.render.style });
-    { const s = state(); const o = res.rewards.opponent; const st = storyFor(b.id); const ln = ((res.passed ? st.win : st.lose) || []).find((l) => l[0] === 'ro') || ((res.passed ? st.win : st.lose) || [])[0]; lastVerdict = { youSvg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' }), themSvg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' }), name: b.pim ? 'Your Pim' : s.avatar.name || 'You', rival: b.pim ? `${o.bot.name}’s Pim` : o.bot.name, yourTier: res.grade, theirTier: tierOf(o.total, b.pass), word: marginWord(res.rewards.margin), line: ln ? ln[1] : GRADE_WORD[res.grade], brief: b.title, link: briefLink(b.id, mode), pim: !!b.pim }; }
+    { const s = state(); const o = res.rewards.opponent; const st = storyFor(b.id); const ln = ((res.passed ? st.win : st.lose) || []).find((l) => l[0] === 'ro') || ((res.passed ? st.win : st.lose) || [])[0]; lastVerdict = { youSvg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' }), themSvg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' }), name: b.pim ? 'Your Pim' : s.avatar.name || 'You', rival: b.pim ? `${o.bot.name}’s Pim` : o.bot.name, yourTier: res.grade, theirTier: tierOf(o.total, b.pass), word: marginWord(res.rewards.margin), line: ln ? ln[1] : GRADE_WORD[res.grade], brief: b.title, link: briefLink(b.id, mode), pim: !!b.pim }; }
     track('verdict', { id: b.id, mode, grade: res.grade, passed: res.passed, margin: res.rewards.margin, first: res.firstPass });
     if (b.tutorial && res.passed) track('tutorial_done');
-    overlay(resultsSheet(res, b)); renderTicker(); renderWallet();
-    if (res.passed) celebrate(res.grade === 'S' ? 36 : 22);
-    $('#overlay .sheet')?.focus?.();
+    renderTicker(); renderWallet();
+    // the judging show first, then the result sheet
+    { const s = state(); const o = res.rewards.opponent; const stageBox = '20 0 320 800';
+      playJudging({ title: b.title, passed: res.passed, grade: res.grade, total: { you: res.total, them: o.total },
+        you: { name: lastVerdict.name, svg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: stageBox }) },
+        them: { name: lastVerdict.rival, svg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: stageBox, pose: 'mirror' }) },
+        dims: res.dims.map((d, i) => ({ label: d.label, max: d.max, you: d.score, them: o.dims[i]?.score ?? 0 })),
+      }, () => { overlay(resultsSheet(res, b)); if (res.passed) celebrate(res.grade === 'S' ? 36 : 22); }); }
     return;
   }
   if (t.closest('[data-share-verdict]')) { if (lastVerdict) { const btn = t.closest('[data-share-verdict]'); btn.disabled = true; shareVerdict(lastVerdict).then((r) => { btn.disabled = false; toast(r === 'shared' ? 'Shared' : r === 'downloaded' ? 'Saved the card and copied the link' : 'Cancelled'); }); } return; }
@@ -270,7 +310,7 @@ function celebrate(n = 22) {
 }
 // The first level teaches by doing: the Top rail is already open, so the first tap puts something on.
 const TUTORIAL = [
-  { target: '.brief-strip', text: 'This is your brief. It shows the dress code and the mood words your outfit should match. The first mood word matters most.', cta: 'Got it' },
+  { target: '.brief-strip', text: 'This is your brief. It shows the dress code and the vibe words your outfit should match. The first vibe word matters most.', cta: 'Got it' },
   { target: '#rail .rail-tiles', text: 'Tap the tee to put it on.', when: () => has('[data-tab="top"] i') || has('[data-tab="dress"] i') },
   { target: '[data-tab="bottom"]', text: 'Now tap “Bottom” and choose something to go with it.', when: () => has('[data-tab="bottom"] i') || has('[data-tab="dress"] i'), pad: 4 },
   { target: '[data-tab="shoes"]', text: 'Finish the outfit with a pair of shoes.', when: () => has('[data-tab="shoes"] i'), pad: 4 },
