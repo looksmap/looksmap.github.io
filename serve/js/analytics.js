@@ -2,7 +2,7 @@
 // Set GOATCOUNTER to your site code (the "serve" in serve.goatcounter.com) to turn it on; empty means nothing is sent.
 // Events become paths in the GoatCounter dashboard, e.g. brief/b012/normal/pass or checkout/paid/t2.
 (function () {
-  var GOATCOUNTER = '';
+  var GOATCOUNTER = 'serve';
   if (!GOATCOUNTER) return;
   var queue = [];
   var clean = function (s) { return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9_:-]+/g, '-').slice(0, 40); };
