@@ -91,32 +91,6 @@ function buildContext(look, brief) {
   };
 }
 
-// One short line per dimension when it scores well or badly. Picked by a hash of the look so the same outfit always
-// gets the same line. Every line has to be true for any outfit with that score, so none of them names a garment.
-const CRIT_GOOD = {
-  brief: ['This outfit suits the occasion.', 'You followed the brief closely.', 'This is right for where you’re going.', 'The vibe words come through clearly.', 'You gave the client what they asked for.', 'This answers the brief well.'],
-  palette: ['The colours go well together.', 'The colours are well balanced.', 'These colours suit each other.', 'Nice colour choices.', 'The colours look planned.', 'The colours work as a set.'],
-  silhouette: ['The shape of the outfit is balanced.', 'The proportions look good.', 'The outfit has a clear shape.', 'The fit and the shape work well.', 'The outline looks neat from head to toe.', 'The shapes suit each other.'],
-  formality: ['Every piece is equally dressy.', 'The pieces match in how formal they are.', 'Nothing is too dressy or too casual for the rest.', 'The outfit is equally dressy from top to shoes.', 'The pieces all belong at the same event.', 'The level of dressiness is even.'],
-  season: ['Everything suits the same weather.', 'The fabrics are right for one season.', 'The layers make sense together.', 'All the pieces belong to one season.', 'The weights of the fabrics match.', 'Nothing looks too warm or too light next to the rest.'],
-  texture: ['The fabrics look good together.', 'There’s a nice mix of textures.', 'The textures are well balanced.', 'The fabrics add interest without clashing.', 'The mix of fabrics works.', 'The textures suit each other.'],
-  focal: ['One piece stands out and the rest support it.', 'The outfit has a clear star piece.', 'It’s easy to see which piece is the main one.', 'The standout piece gets the attention.', 'It’s clear where to look first.', 'The main piece is well supported.'],
-  complete: ['The outfit looks finished.', 'Nothing is missing.', 'The accessories finish the outfit nicely.', 'It looks complete from head to toe.', 'Every piece has a job.', 'This is a full outfit.'],
-  aesthetic: ['The whole outfit follows one style.', 'Every piece fits the same style.', 'The style is clear and consistent.', 'It all looks like it belongs together.', 'The outfit has one clear idea.', 'The pieces share a style.'],
-};
-const CRIT_BAD = {
-  brief: ['This doesn’t suit the occasion yet.', 'The brief asked for something different.', 'It’s a nice outfit, but for another event.', 'Some of the vibe words are missing.', 'Something doesn’t match the brief, so check it again.', 'This is close to the brief, but not quite there.'],
-  palette: ['The colours clash a little.', 'Too many colours are competing.', 'The colours need more balance.', 'These colours don’t quite go together.', 'Try fewer colours, or colours that are closer together.', 'The colour mix looks unplanned.'],
-  silhouette: ['The shape of the outfit is unbalanced.', 'The outfit needs a clearer shape.', 'The proportions look a bit off.', 'The loose and fitted pieces aren’t balanced.', 'The outline looks heavy in one place.', 'The shapes don’t suit each other yet.'],
-  formality: ['Some pieces are much dressier than others.', 'Dressy and casual pieces are mixed without a link.', 'The pieces don’t match in how formal they are.', 'The dressiness changes too much between pieces.', 'The pieces look like they’re going to different events.', 'One piece is at a different level from the rest.'],
-  season: ['The pieces are dressed for different weather.', 'Light and heavy pieces are mixed without a reason.', 'The fabrics belong to different seasons.', 'The layers don’t suit the same weather.', 'The outfit can’t decide which season it is.', 'Choose pieces for one kind of weather.'],
-  texture: ['The fabrics don’t go together yet.', 'The mix of textures needs work.', 'The textures are either too similar or too many.', 'Changing one fabric would help.', 'The fabrics are competing with each other.', 'The textures need more balance.'],
-  focal: ['It’s hard to tell which piece is the star.', 'The outfit needs one clear standout piece.', 'Either nothing stands out or too much does.', 'Choose one piece to lead.', 'It isn’t clear where to look first.', 'The standout pieces need sorting out.'],
-  complete: ['The outfit doesn’t look finished yet.', 'Something is missing.', 'It needs another piece or two.', 'The accessories need another look.', 'Add or remove a piece to finish it.', 'It’s nearly a full outfit.'],
-  aesthetic: ['The outfit mixes styles that don’t match.', 'Some pieces belong to a different style.', 'The style isn’t clear yet.', 'The pieces don’t share one idea.', 'It looks like two outfits combined.', 'Choose one style and follow it.'],
-};
-const lookHash = (look) => { let h = 2166136261; for (const k of Object.keys(look).sort()) if (look[k]) { for (const ch of `${k}:${look[k].id}`) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } } return h; };
-export function criticLine(dim, good, look) { const pool = (good ? CRIT_GOOD : CRIT_BAD)[dim]; return pool ? pool[lookHash(look) % pool.length] : ''; }
 
 export function scoreLook(look, brief) {
   const c = buildContext(look, brief);
@@ -330,7 +304,7 @@ export function scoreLook(look, brief) {
   total = clamp(Math.round(total), 0, 100);
   const grade = total >= 90 ? 'S' : total >= 80 ? 'A' : total >= 70 ? 'B' : total >= 55 ? 'C' : 'D';
 
-  const dimsOut = DIMS.map((d) => { const sc = dims[d.key] ?? 0; const r = sc / d.max; return { ...d, score: sc, notes: notes.fix.filter((x) => x.dim === d.key).map((x) => x.text), praise: notes.good.filter((x) => x.dim === d.key).map((x) => x.text), critic: r >= 0.85 ? criticLine(d.key, true, look) : r < 0.5 ? criticLine(d.key, false, look) : '' }; });
+  const dimsOut = DIMS.map((d) => { const sc = dims[d.key] ?? 0; const r = sc / d.max; return { ...d, score: sc, notes: notes.fix.filter((x) => x.dim === d.key).map((x) => x.text), praise: notes.good.filter((x) => x.dim === d.key).map((x) => x.text) }; });
   // critique: worst three ratios first, then one praise
   const worst = dimsOut.filter((d) => d.notes.length).sort((a, b) => a.score / a.max - b.score / b.max).slice(0, 3).map((d) => d.notes[0]);
   const praise = dimsOut.filter((d) => d.praise.length).sort((a, b) => b.score / b.max - a.score / a.max)[0]?.praise[0];

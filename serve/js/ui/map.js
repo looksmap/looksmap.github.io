@@ -8,6 +8,7 @@ import { sceneSVG, coverSVG, ribbon, WORLD, pinFill } from './mapart.js';
 import { icon } from './icons.js';
 import { spline } from '../render/rig.js';
 import { MOOD_LABEL } from '../engine/moods.js';
+import { ranked, rankOf, rankedUnlocked, RANKED } from '../engine/state.js';
 import { SLOTS } from '../data/catalog.js';
 import { playStory, storyFor } from './story.js';
 import { renderLook, SKIN, HAIR_COLORS, EYES } from '../render/figure.js';
@@ -76,6 +77,10 @@ function home(s) {
       <div class="me-name"><h1 class="display">${name ? esc(name) : 'Name her'}</h1><button class="btn small ghost" data-edit-avatar>${name ? 'Customise' : 'Pick a name'}</button></div>
       <div class="me-meta"><span>${icon('star')} ${o.s} S of ${o.sTotal}</span><span>${icon('check')} ${o.cleared} of ${o.levels} cleared</span><span>${icon('hanger')} ${inventory().length} pieces</span></div>
       ${next ? `<div class="me-next"><div><div class="kicker">${icon('pin')} Up next</div><b>${esc(next.title)}</b><span class="muted small">${esc(ch.title)} · level ${next.index}${next.pim ? ' · Pim’s chapter' : ''}</span></div><button class="btn primary" data-play="${next.id}" data-play-mode="normal">Play</button></div>` : `<div class="me-next"><div><b>Everything open is cleared.</b><span class="muted small">Replay for S on hard, or run fabric runs for XP.</span></div></div>`}
+    </div>
+    <div class="modes">
+      <button class="mode-card story" data-chapter="${ch?.id || 'c1'}"><span class="mode-ic">${icon('map')}</span><b>Story map</b><span>${ch ? `${esc(ch.title)} · level ${next.index}` : 'Every chapter cleared'}</span></button>
+      <a class="mode-card ranked ${rankedUnlocked() ? '' : 'locked'}" href="#arena"><span class="mode-ic">${icon('crown')}</span><b>Ranked</b><span>${rankedUnlocked() ? `${esc(rankOf(ranked().rp).label)} · ${ranked().rp} points` : `Clear ${RANKED.unlockAfter} levels to unlock`}</span></a>
     </div>
     <h2 class="lt">Novels</h2>
     <div class="novels">${NOVELS.map(novelCard).join('')}</div>

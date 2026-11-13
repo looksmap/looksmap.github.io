@@ -53,4 +53,6 @@ export async function shareVerdict(opts) {
   try { await navigator.clipboard.writeText(opts.link); } catch (e) { /* clipboard may be blocked */ }
   return 'downloaded';
 }
+// A battle link carries the sender's outfit for one brief; the friend who opens it styles the same brief against it.
+export function battleLink(levelId, payload) { const u = new URL(location.href); u.search = ''; u.hash = `battle/${levelId}/${payload}`; return u.toString(); }
 export async function copyLink(link) { try { await navigator.clipboard.writeText(link); return true; } catch (e) { return false; } }

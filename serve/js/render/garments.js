@@ -247,10 +247,12 @@ export function skirt(p = {}) {
   const hipY = Math.max(waist, 372);
   const hipHalf = bodiceHalf(hipY, ease);
   const len = hem - hipY;
-  const mids = range(hipY, hem, 60).slice(1, -1);
+  const flows = ['a', 'full', 'tiered'].includes(shape);
+  const mids = range(hipY, hem, flows ? 44 : 60).slice(1, -1);
   for (const y of mids) {
     const t = (y - hipY) / len;
-    let half = hipHalf + flare * (y - hipY);
+    // flared skirts fall like cloth: they open quickly below the hip and hang straighter toward the hem
+    let half = hipHalf + flare * len * (flows ? t * (1.32 - 0.32 * t) : t);
     if (shape === 'tulip') half = hipHalf + 22 * Math.sin(t * Math.PI);
     if (shape === 'bubble') half = hipHalf + 26 * Math.sin(t * Math.PI) + 4 * t;
     if (shape === 'mermaid') half = y < Y.knee ? hipHalf - 4 * t : hipHalf - 4 + Math.max(0, (y - Y.knee) / (hem - Y.knee)) ** 1.6 * 70;
@@ -260,9 +262,17 @@ export function skirt(p = {}) {
   if (shape === 'tulip') hemHalf = hipHalf - 4;
   if (shape === 'bubble') hemHalf = hipHalf - 2;
   if (shape === 'mermaid') hemHalf = hipHalf - 4 + 70;
-  pts.push([CX - hemHalf, hem, 'c']);
+  // a flowing hem ripples where the folds end; a fitted hem only dips a little at the centre
+  const ripples = (flows || shape === 'mermaid') && !pleats && !slit && (hemStyle === 'straight' || hemStyle === 'curved') && hemHalf > 34;
+  const nWave = ripples ? Math.max(4, Math.round(hemHalf / 13 / 2) * 2) : 0;
+  const hemBow = shape === 'full' ? 14 : shape === 'mermaid' ? 9 : flows ? 7 : 3;
+  const hemAmp = flare > 0.4 ? 5 : flare > 0.2 ? 3.6 : 2.6;
+  const hemAt = (u) => hem + hemBow * (1 - (2 * u - 1) ** 2);
+  pts.push(ripples ? [CX - hemHalf, hem - 2] : [CX - hemHalf, hem, 'c']);
   const hemPts = [];
-  if (hemStyle === 'curved' || shape === 'full' || shape === 'mermaid') hemPts.push([CX, hem + (shape === 'full' ? 14 : 8)]);
+  if (ripples) for (let i = 1; i < nWave; i++) hemPts.push([CX - hemHalf + (2 * hemHalf * i) / nWave, hemAt(i / nWave) + (i % 2 ? hemAmp : -hemAmp)]);
+  else if (hemStyle === 'curved' || shape === 'full' || shape === 'mermaid') hemPts.push([CX, hem + (shape === 'full' ? 14 : 8)]);
+  else if (hemStyle === 'straight' && !slit && !pleats) hemPts.push([CX, hem + hemBow]);
   if (hemStyle === 'asym') { pts[pts.length - 1] = [CX - hemHalf, hem - 70, 'c']; hemPts.push([CX - 10, hem - 20]); }
   if (hemStyle === 'hanky') hemPts.push([CX - hemHalf / 2, hem - 24, 'c'], [CX, hem + 18, 'c'], [CX + hemHalf / 2, hem - 24, 'c']);
   if (slit) hemPts.push([CX + 4, hem, 'c'], [CX + 7, slit, 'c'], [CX + 11, hem, 'c']);
@@ -283,6 +293,18 @@ export function skirt(p = {}) {
     layers.push({ z: z + 0.1, d: dark, fill: 'rgba(0,0,0,.11)', noShade: true, noStroke: true });
     layers.push({ z: z + 0.1, d: light, fill: 'rgba(255,255,255,.08)', noShade: true, noStroke: true });
     layers.push({ z: z + 0.12, d: lines, fill: 'none', stroke: 'rgba(0,0,0,.2)', sw: 0.9, isLine: true });
+  } else if (ripples && len > 70) {
+    // soft folds: a tapering shadow runs down to every dip of the hem and a tapering light to every rise
+    let dark = '', light = '';
+    const w = (2 * hemHalf) / nWave, ya = hipY + Math.min(40, len * 0.14);
+    for (let i = 1; i < nWave; i++) {
+      const x = CX - hemHalf + w * i, xa = CX + (x - CX) * (hipHalf / hemHalf) * 0.92, yb = hemAt(i / nWave) - hemAmp - 2.5;
+      const half = i % 2 ? w * 0.42 : w * 0.26, bend = (x - CX) * 0.06;
+      const wedge = `M${f1(xa)},${f1(ya)} Q${f1((xa + x - half) / 2 + bend)},${f1((ya + yb) / 2)} ${f1(x - half)},${f1(yb)} L${f1(x + half)},${f1(yb)} Q${f1((xa + x + half) / 2 + bend)},${f1((ya + yb) / 2)} ${f1(xa)},${f1(ya)}Z `;
+      if (i % 2) dark += wedge; else light += wedge;
+    }
+    layers.push({ z: z + 0.1, d: dark, fill: 'rgba(30,10,40,.085)', noShade: true, noStroke: true, noDepth: true });
+    layers.push({ z: z + 0.1, d: light, fill: 'rgba(255,255,255,.1)', noShade: true, noStroke: true, noDepth: true });
   } else if (['a', 'full', 'tiered'].includes(shape) && len > 120) {
     let d = '';
     for (const t of [-0.55, -0.2, 0.2, 0.55]) {

@@ -31,6 +31,7 @@ export const installState = () => ({ canPrompt: !!deferredInstall, standalone: s
 export async function promptInstall() { if (!deferredInstall) return 'none'; deferredInstall.prompt(); const r = await deferredInstall.userChoice; track('install_prompt', { outcome: r.outcome }); deferredInstall = null; return r.outcome; }
 function handleDeepLink() {
   const h = (location.hash || '').slice(1);
+  if (h.startsWith('battle/')) { const [, id, payload] = h.split('/'); document.dispatchEvent(new CustomEvent('battlelink', { detail: { id, payload: payload || '' } })); return true; }
   if (!h.startsWith('play/')) return false;
   const [, id, mode] = h.split('/');
   document.dispatchEvent(new CustomEvent('deeplink', { detail: { id, mode: mode || 'normal' } }));

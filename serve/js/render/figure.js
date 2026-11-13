@@ -68,7 +68,8 @@ function browFor(hair, ink) {
 }
 function outlineFor(hex) {
   if (!hex || hex[0] !== '#') return 'rgba(0,0,0,.3)';
-  return isLight(hex) ? 'rgba(46,22,40,.5)' : 'rgba(255,255,255,.2)';
+  // a seam line in the cloth's own colour, not a drawn black outline
+  return isLight(hex) ? shade(hex, -0.34) : shade(hex, 0.2);
 }
 
 let maskSeq = 0;
@@ -86,7 +87,7 @@ function layerSVG(l, depth) {
     return `<path d="${l.d}" fill="none" stroke="${l.stroke}" stroke-width="${l.sw || 1}" stroke-linecap="round" stroke-linejoin="round"${dash}${op}/>`;
   }
   const stroke = l.noStroke || l.hair ? 'none' : l.stroke || outlineFor(l.strokeBase || l.fill);
-  const sw = l.sw || 1.3;
+  const sw = l.sw || 0.9;
   let s = '';
   // small jewellery and glasses get no drop shadow or rim shading: at that size both turn into smudges
   const tiny = (l.z >= G.Z.neck && l.z < G.Z.scarf) || (l.z >= G.Z.earring && l.z < G.Z.headwear) || l.z >= G.Z.eyewear;
@@ -175,14 +176,14 @@ export function renderLook(look, avatar = {}, opts = {}) {
     <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3.2"/></filter>
     <filter id="inset" x="-10%" y="-10%" width="120%" height="120%">
       <feComponentTransfer in="SourceAlpha" result="inv"><feFuncA type="table" tableValues="1 0"/></feComponentTransfer>
-      <feGaussianBlur in="inv" stdDeviation="1" result="blur"/>
-      <feOffset in="blur" dx="-5" dy="-3" result="offd"/>
+      <feGaussianBlur in="inv" stdDeviation="3.4" result="blur"/>
+      <feOffset in="blur" dx="-4" dy="-3" result="offd"/>
       <feComposite in="offd" in2="SourceAlpha" operator="in" result="shadowA"/>
-      <feFlood flood-color="#2A0A28" flood-opacity=".2" result="dark"/>
+      <feFlood flood-color="#2A0A28" flood-opacity=".26" result="dark"/>
       <feComposite in="dark" in2="shadowA" operator="in" result="shadow"/>
       <feOffset in="blur" dx="3" dy="2" result="offl"/>
       <feComposite in="offl" in2="SourceAlpha" operator="in" result="lightA"/>
-      <feFlood flood-color="#fff" flood-opacity=".1" result="white"/>
+      <feFlood flood-color="#fff" flood-opacity=".2" result="white"/>
       <feComposite in="white" in2="lightA" operator="in" result="light"/>
       <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="shadow"/><feMergeNode in="light"/></feMerge>
     </filter>

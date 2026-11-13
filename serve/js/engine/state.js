@@ -5,7 +5,7 @@ import { CHAPTERS, NOVELS, chaptersOf, buildLevels } from '../data/chapters.js';
 import { TWISTS } from '../data/briefs.js';
 import { SWATCHES, COLORWAYS, PRINTS } from '../data/generator.js';
 import { scoreLook, DIMS } from './score.js';
-import { opponentFor, gradeByMargin } from './bots.js';
+import { opponentFor, gradeByMargin, BOTS } from './bots.js';
 
 export const { levels: LEVELS, order: LEVEL_ORDER } = buildLevels(SETS);
 export { CHAPTERS, NOVELS, chaptersOf, SETS, SET_BY_ID, SWATCHES };
@@ -37,6 +37,7 @@ const fresh = () => ({
   swatches: { cotton: 6, denim: 2, leather: 1, dye: 2, print: 1 },
   energy: 64, energyAt: Date.now(),
   seen: { intro: false },
+  ranked: { rp: 0, wins: 0, losses: 0, streak: 0, best: 0, played: 0 },
   setsClaimed: {},
   chapterBonus: {}, perfectBonus: {},
   createdAt: Date.now(),
@@ -414,17 +415,41 @@ export function evaluate(look, brief) {
   return r;
 }
 
-export function submit(look, brief) {
+// only pieces the player owns can be worn; hair is part of the avatar
+const wearable = (look) => Object.fromEntries(Object.entries(look).filter(([k, v]) => v && (k === 'hair' || OWNED.has(v.id))));
+// Boost points won during the judging show: { lineKey: points }. A line can never go above its maximum.
+export function applyBonus(r, bonus) {
+  let add = 0;
+  if (bonus) for (const d of r.dims) { const n = Math.max(0, Math.min(bonus[d.key] || 0, d.max - d.score)); if (n) { d.score += n; add += n; } }
+  if (add) { r.total = Math.min(100, r.total + add); r.boost = add; }
+  return add;
+}
+// Whether a level can be sent for judging right now, without spending anything.
+export function canSubmit(brief) {
   const mode = brief.mode || 'normal';
   const M = MODES[mode] || MODES.normal;
   if (!Object.hasOwn(LEVELS, brief.id) || !modeUnlocked(brief.id, mode)) return { ok: false, reason: 'locked' };
-  // only pieces the player owns can be worn; hair is part of the avatar
-  look = Object.fromEntries(Object.entries(look).filter(([k, v]) => v && (k === 'hair' || OWNED.has(v.id))));
+  if (mode === 'hard' && !fabricRuns(brief.id).left) return { ok: false, reason: 'attempts' };
+  if (!brief.tutorial && energy() < M.cost) return { ok: false, reason: 'energy' };
+  return { ok: true };
+}
+// The score and the rival the judging show starts from. Nothing is saved; submit() gives the same rival.
+export function previewSubmit(look, brief) {
+  const mode = brief.mode || 'normal';
+  const prevMode = (S.results[brief.id] || {})[mode] || R0();
+  return { r: evaluate(wearable(look), brief), opp: opponentFor(brief, { level: S.level, skill: S.skill, mode, attempt: prevMode.attempts || 0 }) };
+}
+export function submit(look, brief, extra = {}) {
+  const mode = brief.mode || 'normal';
+  const M = MODES[mode] || MODES.normal;
+  if (!Object.hasOwn(LEVELS, brief.id) || !modeUnlocked(brief.id, mode)) return { ok: false, reason: 'locked' };
+  look = wearable(look);
   const cost = brief.tutorial ? 0 : M.cost;
   if (mode === 'hard' && !fabricRuns(brief.id).left) return { ok: false, reason: 'attempts' };
   if (cost && !spendEnergy(cost)) return { ok: false, reason: 'energy' };
   if (mode === 'hard') runsFor(brief.id).used++;
   const r = evaluate(look, brief);
+  applyBonus(r, extra.bonus);
   const key = brief.id;
   const prev = S.results[key] || {};
   const prevMode = prev[mode] || R0();
@@ -475,6 +500,81 @@ export function submit(look, brief) {
   save();
   return { ...r, ok: true, passed, firstPass, rewards, pass: brief.pass };
 }
+/* ---------------- friendly battles, the ranked ladder and the level board ---------------- */
+// Judge a look against a given rival without touching progress: used by friend battles and ranked matches.
+export function judgeAgainst(look, brief, opp, bonus) {
+  const r = evaluate(wearable(look), brief);
+  applyBonus(r, bonus);
+  const margin = r.total - opp.total;
+  return { ...r, ok: true, passed: margin >= 0, firstPass: false, pass: brief.pass, grade: gradeByMargin(margin, r.total, brief.pass),
+    rewards: { credits: 0, thread: 0, items: [], swatches: {}, bonus: [], xp: 0, levelUps: [], perfectNow: false, firstS: false, mode: 'normal', opponent: opp, margin } };
+}
+// A friend's outfit as the rival. Their pieces are looked up here and scored by this game, so nothing in a link is trusted.
+export function opponentFromLook(brief, items, who) {
+  const look = hydrate(items);
+  const r = evaluate(look, brief);
+  return { bot: { id: 'friend', name: who.name, avatar: who.avatar }, friend: true, look: Object.fromEntries(Object.entries(look).map(([k, v]) => [k, v.id])), total: r.total, target: r.total, dims: r.dims.map((d) => ({ key: d.key, label: d.label, max: d.max, score: d.score })) };
+}
+// A brief any player can be challenged on, whatever they have unlocked.
+export const battleBrief = (id) => (Object.hasOwn(LEVELS, id) && !LEVELS[id].secret && !LEVELS[id].pim ? { ...LEVELS[id], mode: 'normal', battle: true, tutorial: false, tolerance: LEVELS[id].tolerance ?? 1 } : null);
+
+// Ranked: eighteen steps from Bronze III to Master, 100 points each.
+const RANK_NAMES = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master'];
+export function rankOf(rp) {
+  const step = Math.floor(rp / 100), tier = Math.min(5, Math.floor(step / 3));
+  const div = tier === 5 ? '' : ['III', 'II', 'I'][step % 3];
+  return { rp, tier, name: RANK_NAMES[tier], div, label: tier === 5 ? 'Master' : `${RANK_NAMES[tier]} ${div}`, into: tier === 5 ? Math.min(100, rp - 1500) : rp % 100 };
+}
+export const RANKED = { cost: 6, seconds: 90, unlockAfter: 3 };
+export const ranked = () => S.ranked;
+export const rankedUnlocked = () => LEVEL_ORDER.filter((id) => levelCleared(id)).length >= RANKED.unlockAfter;
+// The next match: a brief from the levels this player has cleared and a rival pitched at their rank, who boosts too.
+export function rankedMatch() {
+  const seed = S.ranked.played;
+  let pool = LEVEL_ORDER.filter((id) => !LEVELS[id].pim && !LEVELS[id].tutorial && levelCleared(id));
+  if (pool.length < 3) pool = LEVEL_ORDER.filter((id) => LEVELS[id].chapter === 'c1' && !LEVELS[id].tutorial);
+  const id = pool[hashStr(`ranked:${seed}:${S.createdAt}`) % pool.length];
+  const rp = S.ranked.rp;
+  const brief = { ...LEVELS[id], mode: 'normal', ranked: true, tutorial: false, pass: Math.round(Math.min(86, 54 + rp * 0.02)), tolerance: LEVELS[id].tolerance ?? 1 };
+  const opp = opponentFor(brief, { level: Math.max(S.level, 4 + Math.floor(rp / 60)), skill: 68, mode: 'normal', attempt: 1000 + seed });
+  const k = hashStr(`boost:${seed}:${id}`) % opp.dims.length, d = opp.dims[k], n = Math.min(4, d.max - d.score);
+  if (n > 0) { d.score += n; d.boost = n; opp.total += n; }
+  const rivalRp = Math.max(0, rp + (hashStr(`rp:${seed}:${id}`) % 141) - 70);
+  return { brief, opp: { ...opp, rank: rankOf(rivalRp) } };
+}
+export function finishRanked(look, match, bonus) {
+  if (!spendEnergy(RANKED.cost)) return { ok: false, reason: 'energy' };
+  const res = judgeAgainst(look, match.brief, match.opp, bonus);
+  const m = res.rewards.margin, R = S.ranked, before = rankOf(R.rp);
+  const delta = res.passed ? 18 + Math.min(10, Math.floor(m / 2)) + (R.streak >= 2 ? 4 : 0) : -Math.min(14, 8 + Math.floor(-m / 3));
+  R.rp = Math.max(0, R.rp + delta); R.played++; R.best = Math.max(R.best, R.rp);
+  if (res.passed) { R.wins++; R.streak++; } else { R.losses++; R.streak = 0; }
+  const credits = res.passed ? 80 : 20;
+  S.credits += credits; res.rewards.credits = credits;
+  res.rewards.xp = res.passed ? 20 : 6; res.rewards.levelUps = gainXP(res.rewards.xp);
+  res.rewards.ranked = { delta: R.rp - before.rp, before, after: rankOf(R.rp), streak: R.streak };
+  save();
+  return res;
+}
+// Who else is near this player on the ladder. Until there is a game server these are the computer stylists.
+export function ladder(name) {
+  const rp = S.ranked.rp;
+  const rows = BOTS.map((b) => ({ name: b.name, rp: Math.max(0, Math.round(rp * 0.9 + (hashStr(`ladder:${b.id}`) % 520) - 180)) }));
+  rows.push({ name, rp, you: true });
+  rows.sort((a, b) => b.rp - a.rp || (a.you ? -1 : 1));
+  return rows.map((r, i) => ({ ...r, place: i + 1, rank: rankOf(r.rp) }));
+}
+// The board shown after judging: how this score sits among the stylists who played the same brief.
+export function levelBoard(brief, opp, yourTotal, yourName) {
+  const rows = BOTS.filter((b) => b.id !== opp.bot.id).slice(0, 8).map((b) => ({ name: b.name, score: Math.max(30, Math.min(97, brief.pass + (hashStr(`${brief.id}:${b.id}`) % 25) - 11)) }));
+  rows.push({ name: opp.bot.name, score: opp.total, rival: true }, { name: yourName, score: yourTotal, you: true });
+  rows.sort((a, b) => b.score - a.score || (a.you ? -1 : 1));
+  const place = rows.findIndex((r) => r.you) + 1;
+  const top = rows.slice(0, 5).map((r, i) => ({ ...r, place: i + 1 }));
+  if (place > 5) top.push({ ...rows[place - 1], place });
+  return { rows: top, place, of: rows.length };
+}
+
 function grantSilently(id) { if (!OWNED.has(id) && BY_ID[id]) { OWNED.add(id); return true; } return false; }
 const GR = { D: 0, C: 1, B: 2, A: 3, S: 4 };
 const betterGrade = (a, b) => (!a ? b : GR[b] > GR[a] ? b : a);

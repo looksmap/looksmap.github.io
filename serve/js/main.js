@@ -4,6 +4,7 @@ import './ui/studio.js';
 import './ui/wardrobe.js';
 import './ui/atelier.js';
 import './ui/you.js';
+import './ui/arena.js';
 import { ensureCatalog } from './data/catalog.js';
 
 init();

@@ -15,8 +15,10 @@ import { offerSheet, runsSheet } from './atelier.js';
 import { OBJ } from './objects.js';
 import { MOOD_LABEL } from '../engine/moods.js';
 import { playJudging } from './judging.js';
+import { gradeByMargin } from '../engine/bots.js';
 import { markSeen } from '../engine/state.js';
-import { shareVerdict, briefLink, copyLink } from './share.js';
+import { shareVerdict, briefLink, copyLink, battleLink } from './share.js';
+import { canSubmit, previewSubmit, judgeAgainst, opponentFromLook, battleBrief, levelBoard, finishRanked, RANKED, rankOf, ranked } from '../engine/state.js';
 import { track } from '../engine/track.js';
 import { installState, promptInstall } from './app.js';
 
@@ -29,7 +31,12 @@ let tab = 'top';
 let zoom = false;
 let railFilter = '';
 
-const isPim = () => !!LEVELS[levelId]?.pim;
+// A friend battle or a ranked match: { kind: 'battle' | 'ranked', brief, opp, deadline? }. It replaces the story brief
+// in the studio until the player leaves; nothing in it touches story progress.
+let special = null;
+export function setSpecial(ctx) { special = ctx; if (ctx) { levelId = ctx.brief.id; mode = 'normal'; look = defaultLook(); tab = 'top'; } }
+export const specialNow = () => special;
+const isPim = () => (special ? false : !!LEVELS[levelId]?.pim);
 export function setLevel(id, m = 'normal') {
   if (LEVELS[id]?.secret) m = 'secret';
   levelId = id; mode = m;
@@ -47,6 +54,7 @@ const wardrobeFor = () => inventory().filter((i) => !!i.pim === isPim());
 const hairIdForStyle = (style) => { const id = `hr_${style.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase())}`; return BY_ID[id] ? id : 'hr_long_wavy'; };
 
 function resolveBrief() {
+  if (special) return special.brief;
   if (!levelId) { try { const j = JSON.parse(sessionStorage.getItem('serve.level') || 'null'); if (j) { levelId = j.id; mode = j.m; } } catch (e) { /* ignore */ } }
   if (!levelId || !Object.hasOwn(LEVELS, levelId) || !levelUnlocked(levelId)) { levelId = (nextOpenLevel() || LEVELS['c1-1']).id; mode = 'normal'; }
   if (!Object.hasOwn(MODES, mode) || !modeUnlocked(levelId, mode)) mode = LEVELS[levelId].secret ? 'secret' : 'normal';
@@ -69,7 +77,7 @@ function briefStrip(b) {
   const res = resultOf(b.id, mode);
   return `<div class="brief-strip" style="--accent:${ch?.accent || 'var(--cherry)'}">
     <div>
-      <div class="eyebrow">${esc(ch?.title || '')} · ${b.secret ? 'secret' : `level ${b.index} · ${MODES[mode].label.toLowerCase()}`}${res?.passed ? ` · best ${res.grade}` : ''}${mode === 'hard' ? ` · ${fabricRuns(b.id).left} run${fabricRuns(b.id).left === 1 ? '' : 's'} left today` : ''}</div>
+      <div class="eyebrow">${special ? `${special.kind === 'ranked' ? `Ranked · vs ${esc(special.opp.bot.name)} · ${esc(special.opp.rank.label)} <span class="rank-clock" id="rankClock"></span>` : `Friendly battle · vs ${esc(special.opp.bot.name)}`}` : `${esc(ch?.title || '')} · ${b.secret ? 'secret' : `level ${b.index} · ${MODES[mode].label.toLowerCase()}`}${res?.passed ? ` · best ${res.grade}` : ''}${mode === 'hard' ? ` · ${fabricRuns(b.id).left} run${fabricRuns(b.id).left === 1 ? '' : 's'} left today` : ''}`}</div>
       <h2>${esc(b.title)}</h2>
       <div class="row"><span class="chip on">${formalWord(b.formality)}</span>${b.mood.map((m, i) => `<span class="chip ${i === 0 ? 'on' : ''}">${esc(MOOD_LABEL(m))}</span>`).join('')}${b.required?.length ? `<span class="chip">needs ${b.required.map((x) => (SLOTS[x] || x).toLowerCase()).join(', ')}</span>` : ''}${b.adapt ? `<span class="chip cherry">${b.adapt.kind}</span>` : ''}</div>
     </div>
@@ -118,7 +126,7 @@ route('studio', () => {
     <div class="actions">
       <button class="btn ghost small" data-clear>Clear</button>
       <button class="btn ghost small" data-save-look>Save</button>
-      <button class="btn primary" data-submit ${worn().length ? '' : 'disabled'}>${b.tutorial ? 'Submit' : `Submit ${icon('bolt')}${MODES[mode].cost}`}</button>
+      <button class="btn primary" data-submit ${worn().length ? '' : 'disabled'}>${b.battle ? 'Battle!' : b.ranked ? `Submit ${icon('bolt')}${RANKED.cost}` : b.tutorial ? 'Submit' : `Submit ${icon('bolt')}${MODES[mode].cost}`}</button>
     </div>
   </div>`;
 }, { fixed: true });
@@ -187,8 +195,15 @@ function briefSheet(b) {
   </aside></div>`;
 }
 
+// Two bars per scoring line. The letter sits where the bar ends, so the grade and the fill always agree
+// (S from 90% of the line, A from 75%, B from 60%, C from 40%).
 function versusBars(mine, theirs) {
-  return `<div class="vbars"><div class="vhead"><span></span><span>you</span><span>them</span></div>${mine.map((d, i) => { const t = theirs[i]?.score ?? 0; const win = d.score > t ? 'win' : d.score < t ? 'lose' : 'tie'; return `<div class="vrow ${win}"><span class="k">${esc(d.label)}</span><span class="tr"><i style="width:${(100 * d.score) / d.max}%"></i><em class="tier t-${dimTier(d.score, d.max)}">${dimTier(d.score, d.max)}</em></span><span class="tr them"><i style="width:${(100 * t) / d.max}%"></i><em class="tier t-${dimTier(t, d.max)}">${dimTier(t, d.max)}</em></span>${d.critic ? `<span class="crit">${esc(d.critic)}</span>` : ''}</div>`; }).join('')}</div>`;
+  const bar = (score, max, them) => {
+    const p = Math.round((100 * score) / max); const g = dimTier(score, max);
+    const at = them ? (p >= 24 ? `right:calc(${p}% - 5px);transform:translateX(100%)` : `right:calc(${p}% + 4px)`) : (p >= 24 ? `left:calc(${p}% - 5px);transform:translateX(-100%)` : `left:calc(${p}% + 4px)`);
+    return `<span class="tr ${them ? 'them' : ''}" title="${score} of ${max}"><i style="width:${p}%"></i><em class="tier t-${g}" style="${at}">${g}</em></span>`;
+  };
+  return `<div class="vbars"><div class="vhead"><span></span><span>you</span><span>them</span></div>${mine.map((d, i) => { const t = theirs[i]?.score ?? 0; const win = d.score > t ? 'win' : d.score < t ? 'lose' : 'tie'; return `<div class="vrow ${win}"><span class="k">${esc(d.label)}</span>${bar(d.score, d.max, false)}${bar(t, d.max, true)}</div>`; }).join('')}</div>`;
 }
 
 let lastVerdict = null;
@@ -206,20 +221,23 @@ function resultsSheet(res, b) {
   const rewardItems = res.rewards.items.map((id) => item(id)).filter(Boolean);
   const sw = Object.entries(res.rewards.swatches || {});
   const st = storyFor(b.id);
-  const lines = (res.passed ? st.win : st.lose) || [];
+  const solo = !b.battle && !b.ranked;   // a story level, as opposed to a friend battle or a ranked match
+  const lines = solo ? (res.passed ? st.win : st.lose) || [] : [];
   const line = lines[0];
+  const rk = res.rewards.ranked;
   return `<div class="sheet-wrap" role="dialog" aria-label="Result"><div class="scrim" data-close-sheet></div><aside class="sheet">
     <button class="close" data-close-sheet>Close ×</button>
-    <div class="eyebrow">${esc(b.title)} · ${MODES[res.rewards.mode]?.label.toLowerCase() || 'normal'}</div>
+    <div class="eyebrow">${esc(b.title)} · ${b.ranked ? 'ranked match' : b.battle ? 'friendly battle' : MODES[res.rewards.mode]?.label.toLowerCase() || 'normal'}</div>
+    ${rk ? `<div class="rank-change ${rk.delta >= 0 ? 'up' : 'down'}"><span class="rank-badge t${rk.after.tier}">${esc(rk.after.label)}</span><div><b>${rk.delta >= 0 ? '+' : ''}${rk.delta} rank points</b><span class="rank-bar"><i style="width:${rk.after.into}%"></i></span><small>${rk.after.label !== rk.before.label ? (rk.delta > 0 ? `Promoted from ${esc(rk.before.label)}!` : `Dropped from ${esc(rk.before.label)}`) : `${rk.after.into} of 100 to the next rank`}${rk.streak >= 2 ? ` · ${rk.streak} wins in a row` : ''}</small></div></div>` : ''}
     ${res.rewards.perfectNow ? `<div class="levelup gold">${OBJ.star(40)}<div><b>Perfect chapter</b><span>You earned an S on every level in every mode. The secret level is open, and you’ve won 150 Thread.</span></div></div>` : ''}
     ${line ? `<div class="story-inline"><div class="story-portrait sm ${line[0]}">${portrait(line[0], s.avatar)}</div><div><div class="story-name">${esc(line[0] === 'you' ? (s.avatar.name || 'You') : CAST[line[0]]?.name || line[0])}</div><p>${esc(line[1])}</p>${lines[1] ? `<div class="story-name" style="margin-top:6px">${esc(lines[1][0] === 'you' ? (s.avatar.name || 'You') : CAST[lines[1][0]]?.name || lines[1][0])}</div><p>${esc(lines[1][1])}</p>` : ''}</div></div>` : ''}
     ${(() => { const o = res.rewards.opponent; const m = res.rewards.margin; return `<div class="versus">
       <div class="vs-col you"><div class="vs-fig">${figure(look, s.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' })}</div><b>${esc(b.pim ? 'Your Pim' : s.avatar.name || 'You')}</b><span class="n tier t-${res.grade} ${res.passed ? '' : 'fail'}">${res.grade}</span></div>
       <div class="vs-mid"><span class="vs-word">${res.passed ? (m === 0 ? 'Tie' : 'Won') : 'Lost'}</span><span class="vs-by">${marginWord(m).replace(/^(Won|Lost) /, '')}</span><span class="stamp ${res.passed ? '' : 'no'}">${res.grade === 'S' ? 'perfect' : res.passed ? 'cleared' : 'not yet'}</span></div>
-      <div class="vs-col them"><div class="vs-fig">${figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' })}</div><b>${esc(b.pim ? `${o.bot.name}’s Pim` : o.bot.name)}</b><span class="n tier t-${tierOf(o.total, b.pass)}">${tierOf(o.total, b.pass)}</span></div>
+      <div class="vs-col them"><div class="vs-fig">${figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' })}</div><b>${esc(b.pim ? `${o.bot.name}’s Pim` : o.bot.name)}</b><span class="n tier t-${gradeByMargin(-res.rewards.margin, o.total, b.pass)}">${gradeByMargin(-res.rewards.margin, o.total, b.pass)}</span></div>
     </div>
-    <p class="muted small vs-note">${res.passed ? (res.firstPass ? 'Cleared. The next level is open.' : b.tutorial ? 'Cleared again. The first level is for practice, so replays earn nothing.' : 'Cleared again. Replays pay 30% of the credits and sometimes give you a piece.') : `Beat ${esc(o.bot.name)} by a clear margin to earn an S. You still earned ${res.rewards.xp} XP for trying.`}</p>`; })()}
-    <div class="share-row"><button class="btn small primary" data-share-verdict>${icon('camera')} Share your result</button><button class="btn small ghost" data-copy-brief>Copy brief link</button></div>
+    <p class="muted small vs-note">${b.battle ? (res.passed ? `You beat ${esc(o.bot.name)}’s outfit! Send yours back and see if they can answer it.` : `${esc(o.bot.name)}’s outfit won this time. Restyle and try again, or send them a new challenge.`) : b.ranked ? (res.passed ? 'A ranked win. Keep the streak going for bonus points.' : 'A ranked loss costs a few points. The next match is a new brief and a new rival.') : res.passed ? (res.firstPass ? 'Cleared. The next level is open.' : b.tutorial ? 'Cleared again. The first level is for practice, so replays earn nothing.' : 'Cleared again. Replays pay 30% of the credits and sometimes give you a piece.') : `Beat ${esc(o.bot.name)} by a clear margin to earn an S. You still earned ${res.rewards.xp} XP for trying.`}</p>`; })()}
+    <div class="share-row"><button class="btn small primary" data-share-verdict>${icon('camera')} Share your result</button><button class="btn small ghost" data-challenge>${icon('sparkle')} Challenge a friend</button></div>
     ${installNudge(s)}
     ${res.rewards.levelUps?.length ? res.rewards.levelUps.map((u) => `<div class="levelup">${OBJ.star(40)}<div><b>Level ${u.level}</b><span>Your energy now goes up to ${u.energyMax} and has been refilled. You also earned ${u.credits} credits${u.thread ? ` and ${u.thread} Thread` : ''}.</span></div></div>`).join('') : ''}
     ${res.passed ? `<div class="rewards"><div class="mono">You earned <b>${fmt(res.rewards.credits)} credits</b> · <b>${res.rewards.xp} XP</b>${res.rewards.thread ? ` · <b>${res.rewards.thread} Thread</b>` : ''}${sw.length ? ` · ${sw.map(([k, n]) => `${n} ${esc(k)}`).join(', ')}` : ''}${res.rewards.bonus.length ? `<span class="muted"> · ${res.rewards.bonus.map(esc).join(' · ')}</span>` : ''}</div>${rewardItems.map((it) => `<div class="reward-item"><div class="img">${thumb(it, s.avatar)}</div><div><div style="font-size:13px">${esc(it.name)}</div><div class="mono muted">${esc(SET_BY_ID[it.set]?.name || houseName(it.house))} · added to wardrobe</div></div></div>`).join('')}</div>` : ''}
@@ -228,9 +246,9 @@ function resultsSheet(res, b) {
     <ul class="notes">${res.critique.map((n) => `<li class="${res.dims.some((d) => d.praise.includes(n)) ? 'good' : ''}">${esc(n)}</li>`).join('')}</ul>
     ${swap ? `<div class="swap"><span>Tip: ${swap.item ? (look[swap.slot] ? `wearing <b>${esc(swap.item.name)}</b> instead of ${esc(look[swap.slot].name)}` : `adding <b>${esc(swap.item.name)}</b>`) : `taking off <b>${esc(look[swap.slot]?.name)}</b>`} would raise your score to ${swap.score}.</span><button class="btn small" data-apply-swap="${swap.item?.id || ''}" data-swap-slot="${swap.slot}" data-close-sheet>Try it</button></div>` : ''}
     <div class="sheet-actions">
-      ${res.passed && next && next.id !== b.id ? `<button class="btn primary block" data-next="${next.id}">Next: ${esc(next.title)}</button>` : ''}
+      ${b.ranked ? `<a class="btn primary block" href="#arena" data-close-sheet>Next ranked match</a><a class="btn block" href="#map" data-close-sheet>Back to Chapters</a>` : b.battle ? `<button class="btn primary block" data-challenge>Send your outfit back</button><button class="btn block" data-close-sheet>Restyle and battle again</button><a class="btn ghost block" href="#map" data-close-sheet>Back to Chapters</a>` : `${res.passed && next && next.id !== b.id ? `<button class="btn primary block" data-next="${next.id}">Next: ${esc(next.title)}</button>` : ''}
       <a class="btn block" href="#map" data-close-sheet>Back to the map</a>
-      <button class="btn ghost block" data-close-sheet>Restyle</button>
+      <button class="btn ghost block" data-close-sheet>Restyle</button>`}
     </div>
   </aside></div>`;
 }
@@ -248,25 +266,8 @@ document.addEventListener('click', (e) => {
   const sw = t.closest('[data-apply-swap]'); if (sw) { const id = sw.dataset.applySwap; if (id) equip(item(id)); else delete look[sw.dataset.swapSlot]; closeOverlay(); refresh(); toast('Swap applied'); return; }
   if (t.closest('[data-save-look]')) { const b = resolveBrief(); const r = evaluate(look, b); saveLook(look, b.title, r.total, b.id); toast('Look saved'); if (t.closest('[data-close-sheet]')) closeOverlay(); return; }
   if (t.closest('[data-open-brief]')) { overlay(briefSheet(resolveBrief())); return; }
-  if (t.closest('[data-submit]')) {
-    const b = resolveBrief();
-    const res = submit(look, b);
-    if (!res.ok) { if (res.reason === 'energy') overlay(offerSheet('energy')); else if (res.reason === 'attempts') overlay(runsSheet(b.id)); else if (res.reason === 'locked') { toast('That level is not open yet'); navigate('#map'); } else toast('That didn’t go through. Tap again.'); return; }
-    if (coachActive()) { stopCoach(); markSeen('coach'); }
-    if (look.hair) setAvatar({ hairStyle: look.hair.render.style });
-    { const s = state(); const o = res.rewards.opponent; const st = storyFor(b.id); const ln = ((res.passed ? st.win : st.lose) || []).find((l) => l[0] === 'ro') || ((res.passed ? st.win : st.lose) || [])[0]; lastVerdict = { youSvg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' }), themSvg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' }), name: b.pim ? 'Your Pim' : s.avatar.name || 'You', rival: b.pim ? `${o.bot.name}’s Pim` : o.bot.name, yourTier: res.grade, theirTier: tierOf(o.total, b.pass), word: marginWord(res.rewards.margin), line: ln ? ln[1] : GRADE_WORD[res.grade], brief: b.title, link: briefLink(b.id, mode), pim: !!b.pim }; }
-    track('verdict', { id: b.id, mode, grade: res.grade, passed: res.passed, margin: res.rewards.margin, first: res.firstPass });
-    if (b.tutorial && res.passed) track('tutorial_done');
-    renderTicker(); renderWallet();
-    // the judging show first, then the result sheet
-    { const s = state(); const o = res.rewards.opponent; const stageBox = '20 0 320 800';
-      playJudging({ title: b.title, passed: res.passed, grade: res.grade, total: { you: res.total, them: o.total },
-        you: { name: lastVerdict.name, svg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: stageBox }) },
-        them: { name: lastVerdict.rival, svg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: stageBox, pose: 'mirror' }) },
-        dims: res.dims.map((d, i) => ({ label: d.label, max: d.max, you: d.score, them: o.dims[i]?.score ?? 0 })),
-      }, () => { overlay(resultsSheet(res, b)); if (res.passed) celebrate(res.grade === 'S' ? 36 : 22); }); }
-    return;
-  }
+  if (t.closest('[data-submit]')) { runSubmit(); return; }
+  if (t.closest('[data-challenge]')) { sendChallenge(); return; }
   if (t.closest('[data-share-verdict]')) { if (lastVerdict) { const btn = t.closest('[data-share-verdict]'); btn.disabled = true; shareVerdict(lastVerdict).then((r) => { btn.disabled = false; toast(r === 'shared' ? 'Shared' : r === 'downloaded' ? 'Saved the card and copied the link' : 'Cancelled'); }); } return; }
   if (t.closest('[data-copy-brief]')) { if (lastVerdict) copyLink(lastVerdict.link).then((ok) => toast(ok ? 'Link copied' : lastVerdict.link)); return; }
   if (t.closest('[data-install]')) { promptInstall().then(() => { markSeen('installNudge'); rerender(); }); return; }
@@ -275,6 +276,103 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-close-sheet]')) { closeOverlay(); refresh(); return; }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#overlay')?.firstChild) { closeOverlay(); if ($('#stage')) refresh(); } });
+
+/* ---------- submit: check, judging show with boosts, then the result ---------- */
+let judgingNow = false;
+function runSubmit() {
+  if (judgingNow) return;
+  const b = resolveBrief(), s = state(), sp = special;
+  let pre;
+  if (sp) {
+    if (sp.kind === 'ranked' && energy() < RANKED.cost) { overlay(offerSheet('energy')); return; }
+    pre = { r: judgeAgainst(look, b, sp.opp), opp: sp.opp };
+  } else {
+    const chk = canSubmit(b);
+    if (!chk.ok) { if (chk.reason === 'energy') overlay(offerSheet('energy')); else if (chk.reason === 'attempts') overlay(runsSheet(b.id)); else { toast('That level is not open yet'); navigate('#map'); } return; }
+    pre = previewSubmit(look, b);
+  }
+  if (coachActive()) { stopCoach(); markSeen('coach'); }
+  stopClock();
+  const o = pre.opp, stageBox = '20 0 320 800';
+  const myName = b.pim ? 'Your Pim' : s.avatar.name || 'You', rivalName = b.pim ? `${o.bot.name}’s Pim` : o.bot.name;
+  judgingNow = true;
+  playJudging({ title: b.title, total: { you: pre.r.total, them: o.total }, gradeOf: (y, th) => gradeByMargin(y - th, y, b.pass),
+    you: { name: myName, tag: sp?.kind === 'ranked' ? rankOf(ranked().rp).label : '', svg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: stageBox }) },
+    them: { name: rivalName, tag: o.rank?.label || '', svg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: stageBox, pose: 'mirror' }) },
+    dims: pre.r.dims.map((d, i) => ({ key: d.key, label: d.label, max: d.max, you: d.score, them: o.dims[i]?.score ?? 0, themBoost: o.dims[i]?.boost || 0 })),
+    board: (mine) => ({ title: 'Top stylists on this brief', ...levelBoard(b, o, mine, myName) }),
+  }, (bonus) => { judgingNow = false; finishSubmit(b, sp, bonus, myName, rivalName); });
+}
+function finishSubmit(b, sp, bonus, myName, rivalName) {
+  const res = sp ? (sp.kind === 'ranked' ? finishRanked(look, sp, bonus) : judgeAgainst(look, b, sp.opp, bonus)) : submit(look, b, { bonus });
+  if (!res.ok) { toast(res.reason === 'energy' ? 'Not enough energy' : 'That didn’t go through. Tap Submit again.'); refresh(); return; }
+  const s = state(), o = res.rewards.opponent;
+  if (!sp && look.hair) setAvatar({ hairStyle: look.hair.render.style });
+  const st = sp ? null : storyFor(b.id);
+  const ln = st ? ((res.passed ? st.win : st.lose) || []).find((l) => l[0] === 'ro') || ((res.passed ? st.win : st.lose) || [])[0] : null;
+  lastVerdict = { youSvg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' }), themSvg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' }), name: myName, rival: rivalName, yourTier: res.grade, theirTier: gradeByMargin(-res.rewards.margin, o.total, b.pass), word: marginWord(res.rewards.margin), line: ln ? ln[1] : GRADE_WORD[res.grade], brief: b.title, link: sp ? challengeLink(b) : briefLink(b.id, mode), pim: !!b.pim };
+  track('verdict', { id: b.id, mode: sp ? sp.kind : mode, grade: res.grade, passed: res.passed, margin: res.rewards.margin, first: res.firstPass });
+  if (b.tutorial && res.passed) track('tutorial_done');
+  if (sp?.kind === 'ranked') special = null;   // a ranked match is played once
+  renderTicker(); renderWallet();
+  overlay(resultsSheet(res, b));
+  if (res.passed) celebrate(res.grade === 'S' ? 36 : 22);
+}
+
+/* ---------- friend battles ---------- */
+const enc = (obj) => btoa(unescape(encodeURIComponent(JSON.stringify(obj)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const dec = (str) => JSON.parse(decodeURIComponent(escape(atob(String(str).replace(/-/g, '+').replace(/_/g, '/')))));
+function challengeLink(b) {
+  const a = state().avatar;
+  const items = Object.fromEntries(Object.entries(look).filter(([, v]) => v).map(([k, v]) => [k, v.id]));
+  return battleLink(b.id, enc({ n: (a.name || 'A friend').slice(0, 16), a: { skin: a.skin, hairStyle: a.hairStyle, hairColor: a.hairColor, eyes: a.eyes, lip: a.lip }, i: items }));
+}
+async function sendChallenge() {
+  const b = resolveBrief();
+  if (!worn().length) { toast('Put an outfit on first'); return; }
+  const url = challengeLink(b), who = state().avatar.name || 'A friend';
+  const text = `${who} challenged you to a style battle on Serve: “${b.title}”. Can you beat this outfit?`;
+  track('challenge_sent', { id: b.id });
+  if (navigator.share) { try { await navigator.share({ title: 'Serve style battle', text, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+  toast((await copyLink(url)) ? 'Battle link copied. Send it to a friend!' : url, 3600);
+}
+// Only known values from a link are used: an avatar is built from the game's own lists, and item ids are looked up.
+function readChallenge(payload) {
+  try {
+    const p = dec(payload);
+    const a = p.a || {};
+    const avatar = { skin: Object.hasOwn(SKIN, a.skin) ? a.skin : 'fair', hairColor: Object.hasOwn(HAIR_COLORS, a.hairColor) ? a.hairColor : 'blonde', eyes: Object.hasOwn(EYES, a.eyes) ? a.eyes : 'blue', hairStyle: /^[A-Za-z]{1,20}$/.test(a.hairStyle || '') ? a.hairStyle : 'longWavy', lip: /^#[0-9a-fA-F]{6}$/.test(a.lip || '') ? a.lip : '#E2527F' };
+    const items = {};
+    for (const [slot, id] of Object.entries(p.i || {}).slice(0, 24)) if (typeof id === 'string' && id.length < 80 && (Object.hasOwn(SLOTS, slot) || slot === 'hair')) items[slot] = id;
+    const name = String(p.n || 'A friend').replace(/[^\p{L}\p{N} ._'’-]/gu, '').slice(0, 16) || 'A friend';
+    return { name, avatar, items };
+  } catch (e) { return null; }
+}
+document.addEventListener('battlelink', (e) => {
+  const go = (hash) => { history.replaceState(null, '', hash); window.dispatchEvent(new HashChangeEvent('hashchange')); };
+  const brief = battleBrief(e.detail.id), c = brief && readChallenge(e.detail.payload);
+  const opp = c && opponentFromLook(brief, c.items, { name: c.name, avatar: c.avatar });
+  if (!opp || !(opp.look.dress || opp.look.top)) { go('#map'); toast('That battle link could not be read.', 3600); return; }
+  track('challenge_opened', { id: brief.id });
+  setSpecial({ kind: 'battle', brief, opp });
+  go('#studio');
+  toast(`${c.name} challenged you! Style “${brief.title}” and beat their outfit.`, 4600);
+});
+
+/* ---------- ranked: the clock ---------- */
+let clock = 0;
+function stopClock() { clearInterval(clock); clock = 0; }
+function startClock() {
+  stopClock();
+  if (special?.kind !== 'ranked') return;
+  const tick = () => {
+    if (special?.kind !== 'ranked') { stopClock(); return; }
+    const left = Math.max(0, Math.ceil((special.deadline - Date.now()) / 1000));
+    const el = $('#rankClock'); if (el) { el.textContent = `${left}s`; el.classList.toggle('low', left <= 15); }
+    if (left <= 0) { stopClock(); toast('Time is up! Sending your outfit.'); runSubmit(); }
+  };
+  clock = setInterval(tick, 500); tick();
+}
 
 /* ---------- first level: coach marks ---------- */
 const has = (sel) => !!document.querySelector(sel);
@@ -317,7 +415,8 @@ const TUTORIAL = [
   { target: '[data-submit]', text: 'When you’re happy with the outfit, tap Submit. It will be scored against another stylist’s outfit.', when: () => has('[aria-label="Result"]') },
 ];
 document.addEventListener('view:rendered', (e) => {
-  if (e.detail.name !== 'studio') { stopCoach(); return; }
+  if (e.detail.name !== 'studio') { stopCoach(); stopClock(); special = null; return; }
+  startClock();
   if (coachActive()) return;
   const b = resolveBrief();
   const s = state();

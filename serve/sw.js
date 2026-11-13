@@ -1,6 +1,6 @@
 // App shell cache. Old caches are dropped on activate. dev/build.mjs writes the part of VERSION after the last dash
 // (a hash of the script and stylesheet), so every release gets a new cache; bump the number for a named release.
-const VERSION = 'serve-v0.10.0-83593cfd';
+const VERSION = 'serve-v0.10.0-88380dee';
 // The game's modules are loaded as one built file (js/serve.bundle.js, made by dev/build.mjs).
 const SHELL = ['./', './index.html', './css/app.css', './manifest.webmanifest', './js/analytics.js', './js/serve.bundle.js'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
