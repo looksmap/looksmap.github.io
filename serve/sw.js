@@ -1,5 +1,5 @@
 // App shell cache. Bump VERSION on every release; old caches are dropped on activate.
-const VERSION = 'serve-v0.9.8';
+const VERSION = 'serve-v0.9.9';
 const SHELL = ['./', './index.html', './css/app.css', './manifest.webmanifest', './js/main.js'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });

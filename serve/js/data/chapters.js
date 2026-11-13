@@ -44,17 +44,17 @@ export const CHAPTERS = [
     swatches: ['satin', 'velvet', 'fur', 'gold'], basePass: 72, step: 2, unlock: 'c2',
     levels: [
       L('First date, wine bar', 'Natural wine, low light', 'Sleek and a little romantic, mostly dark. A bag small enough to forget.', 3, ['sleek', 'romantic', 'dark'], 2, ['bag']),
-      L('The tuxedo dinner', 'Maison Ferré, private dinner', 'A tuxedo cut for a woman. Tailored, sharp and sleek. Black wins. Bring a bag.', 4, ['tailored', 'sharp', 'sleek'], 2, ['bag']),
+      L('The tuxedo dinner', 'Maison Solène, private dinner', 'A tuxedo cut for a woman. Tailored, sharp and sleek. Black wins. Bring a bag.', 4, ['tailored', 'sharp', 'sleek'], 2, ['bag']),
       L('Fashion week', 'HALFTONE, standing section', 'Strangers will photograph you from the knees up. Bold, modern and sharp, with one idea. Bring a bag.', 3, ['bold', 'modern', 'sharp'], 3, ['bag']),
       L('After-party, 2am', 'Someone’s kitchen', 'Undone on purpose. Edgy and layered, as if you came from somewhere better.', 2, ['undone', 'edgy', 'nocturnal'], 2),
-      L('Brunch in fur', 'Maison Ferré, Sunday 1pm', 'Fur, gold and sunglasses indoors. One animal print, one metal, one hero piece. Bring a bag.', 3, ['mob', 'bold', 'warm'], 4, ['bag']),
+      L('Brunch in fur', 'Maison Solène, Sunday 1pm', 'Fur, gold and sunglasses indoors. One animal print, one metal, one hero piece. Bring a bag.', 3, ['mob', 'bold', 'warm'], 4, ['bag']),
       L('The sheer blouse', 'A gallery dinner', 'Something sheer, worn as if it’s nothing. Sleek and dark. Bring a bag.', 4, ['siren', 'sleek', 'dark'], 2, ['bag'], { mustTexture: 'sheer' }),
       L('Black-tie gala', 'A gala with a seating plan', 'The strictest dress code there’s. Glamorous, sleek and classic. Don’t dress under it. Bring a bag.', 6, ['glamorous', 'sleek', 'classic'], 2, ['bag'], { tolerance: 0 }),
       L('Hotel bar, closing time', 'The hotel bar', 'Glamour with the shoes off in spirit. Glamorous, but undone.', 4, ['glamorous', 'undone', 'nocturnal'], 2),
     ],
   },
   {
-    id: 'c4', number: '04', title: 'New Look', theme: 'The garden house', line: 'The garden house. Nipped waists, full skirts, printed cotton, gloves, hats.', accent: '#9DB4CF', sets: ['new_look', 'garden_toile', 'ballet_class', 'horse_girl_noir', 'debutante'],
+    id: 'c4', number: '04', title: 'New Silhouette', theme: 'The garden house', line: 'The garden house. Nipped waists, full skirts, printed cotton, gloves, hats.', accent: '#9DB4CF', sets: ['new_look', 'garden_toile', 'ballet_class', 'horse_girl_noir', 'debutante'],
     swatches: ['wool', 'cotton', 'lace', 'pearl'], basePass: 76, step: 2, unlock: 'c3',
     levels: [
       L('Garden party', 'A lawn and a string quartet', 'Pretty, polished and fresh. A full skirt wouldn’t be wrong. Bring a bag.', 3, ['pretty', 'polished', 'fresh'], 1, ['bag']),
