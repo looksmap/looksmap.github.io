@@ -82,4 +82,15 @@ export function opponentFor(brief, { level = 1, skill = 68, mode = 'normal', att
   return { bot, look: Object.fromEntries(Object.entries(look).map(([k, v]) => [k, v.id])), total, dims, lead: real.lead, palette: real.palette, target };
 }
 
+// There are no ties. When the two totals are equal, the lines are compared in the order they are judged, and whoever
+// scored higher on the first line where they differ gets one tiebreak point. The point goes to the rival when the
+// player's outfit is held under a ceiling by the brief (ceiling), and when every line is equal: a copy does not beat
+// the outfit it copies. dims: [{ label, score }], theirDims: [{ score }]. Returns null when the totals differ.
+export function tieBreak(dims, theirDims, total, theirTotal, ceiling = 100) {
+  if (total !== theirTotal) return null;
+  const i = dims.findIndex((d, k) => d.score !== (theirDims[k]?.score ?? 0));
+  const ahead = i >= 0 && dims[i].score > (theirDims[i]?.score ?? 0);
+  const you = ahead && total < Math.min(100, ceiling);
+  return { you: you ? 1 : 0, them: you ? 0 : 1, label: i >= 0 ? dims[i].label : null, why: i < 0 ? 'same' : ahead && !you ? 'ceiling' : 'line' };
+}
 export const gradeByMargin = (margin, total, pass) => (margin >= 10 && total >= pass ? 'S' : margin >= 4 ? 'A' : margin >= 0 ? 'B' : margin >= -8 ? 'C' : 'D');

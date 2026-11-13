@@ -3,11 +3,13 @@
 // player can use the boosts they own and that are off cooldown: Catwalk (+2 on each of the next three lines) and Aura
 // (+4 on the next line). A boost never lifts a line above its maximum, so it is worth saving for a line that needs
 // it. The caller says which boosts are ready (d.boosts) and is told the moment one is used (d.onBoost). Then the
-// winner is announced, the board for this brief appears for a moment, and the show closes by itself.
+// winner is announced, the board for this brief appears for a moment, and the show closes by itself. Two equal totals
+// are settled by a tiebreak point (engine/bots.js tieBreak), so the show never ends level.
 // A tap speeds it along and Skip closes it. While it is up the screen behind it cannot be reached, by pointer or by
 // keyboard, and focus starts on the first boost that is ready. When the device asks for less motion the show is not
 // played, and a ready boost is used only when it changes the grade, so it is never spent for nothing.
 import { $, esc, reduced } from './app.js';
+import { tieBreak } from '../engine/bots.js';
 
 const STEP = 900;      // one scoring line
 export const BOOSTS = [
@@ -48,25 +50,32 @@ export function autoBonus(dims, ready) {
  * d: { title, you: { name, svg, tag? }, them: { name, svg, tag? }, dims: [{ key, label, max, you, them, themBoost? }],
  *      total: { you, them }, gradeOf(you, them) → letter, board(you) → { title, rows: [{ place, name, score, you? }], place, of } | null,
  *      boosts: { catwalk: { state: 'ready' | 'cooldown' | 'locked', leftMs }, aura: {...} }, onBoost(id) }
- * done(bonus, yourTotal) runs exactly once. bonus is { lineKey: points } won with the boosts.
+ * done(bonus, yourTotal) runs exactly once. bonus is { lineKey: points } won with the boosts. board(you, them) gets
+ * both totals after any tiebreak point.
  */
 export function playJudging(d, done) {
   close();
   const base = d.dims.reduce((a, r) => a + r.you, 0), off = d.total.you - base;
   // an outfit held under a ceiling by the brief (d.cap) stays under it, boosts or not: the same rule the saved score uses
   const totalWith = (bonus) => Math.max(d.total.you, Math.min(d.cap ?? 100, d.total.you + Object.values(bonus).reduce((a, b) => a + b, 0)));
+  // the two totals as they will be saved: boosts in, and a tiebreak point to one side when they would be equal
+  const settle = (bonus) => {
+    const mine = totalWith(bonus);
+    const tb = tieBreak(d.dims.map((r) => ({ label: r.label, score: r.you + (bonus[r.key] || 0) })), d.dims.map((r) => ({ score: r.them })), mine, d.total.them, d.cap ?? 100);
+    return { mine: mine + (tb?.you || 0), them: d.total.them + (tb?.them || 0), tb };
+  };
   const stateOf = (id) => d.boosts?.[id]?.state || 'locked';
   const mmss = (ms) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   if (reduced() || !$('#device')) {
     const ready = { catwalk: stateOf('catwalk') === 'ready', aura: stateOf('aura') === 'ready' };
-    const gradeWith = (b) => d.gradeOf(totalWith(b), d.total.them);
+    const gradeWith = (b) => { const s = settle(b); return d.gradeOf(s.mine, s.them); };
     const plain = gradeWith({});
     // the cheapest choice that reaches the best grade: nothing, then one boost, then both
     const tries = [{}, { catwalk: ready.catwalk }, { aura: ready.aura }, ready].map((use) => ({ use, bonus: autoBonus(d.dims, { catwalk: !!use.catwalk, aura: !!use.aura }) }));
     const best = gradeWith(tries[3].bonus);
     const pick = best === plain ? tries[0] : tries.find((t) => gradeWith(t.bonus) === best);
     for (const id of Object.keys(pick.use)) if (pick.use[id]) d.onBoost?.(id);
-    done(pick.bonus, totalWith(pick.bonus)); return;
+    done(pick.bonus, settle(pick.bonus).mine); return;
   }
   const node = document.createElement('div');
   node.className = 'judge'; node.setAttribute('role', 'dialog'); node.setAttribute('aria-modal', 'true'); node.setAttribute('aria-label', 'Judging');
@@ -99,7 +108,7 @@ export function playJudging(d, done) {
   const at = (ms, fn) => timers.push(setTimeout(fn, ms));
   let you = 0, them = 0, phase = 'rounds', ended = false, shown = 0;
   const bonus = {}, left = { catwalk: 0, aura: 0 }, used = {};
-  const end = () => { if (ended) return; ended = true; close(); done(bonus, totalWith(bonus)); };
+  const end = () => { if (ended) return; ended = true; close(); done(bonus, settle(bonus).mine); };
   const scoreEl = { you: q('[data-score="you"]'), them: q('[data-score="them"]') };
   const label = q('.judge-label'), nextEl = q('.judge-next'), bars = { you: q('.jb.you'), them: q('.jb.them') }, dots = [...node.querySelectorAll('.judge-dots i')];
   const pop = (side, text) => { const el = q(`.judge-side.${side} .judge-pop`); el.textContent = text; el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); };
@@ -140,14 +149,15 @@ export function playJudging(d, done) {
     phase = 'final'; alive = false;
     for (const t of timers.splice(0)) clearTimeout(t);
     for (let i = shown; i < d.dims.length; i++) { scoreLine(i); const r = d.dims[i]; dots[i]?.classList.add(r.you > r.them ? 'you' : r.them > r.you ? 'them' : 'tie'); }   // lines not yet shown still count, with any boost that was running
-    const mine = totalWith(bonus), passed = mine >= d.total.them, grade = d.gradeOf(mine, d.total.them);
-    scoreEl.you.textContent = mine; scoreEl.them.textContent = d.total.them;
+    const { mine, them: theirs, tb } = settle(bonus), passed = mine > theirs, grade = d.gradeOf(mine, theirs);
+    scoreEl.you.textContent = mine; scoreEl.them.textContent = theirs;
+    if (tb) pop(tb.you ? 'you' : 'them', 'Tiebreak +1');
     q('.judge-round').classList.add('done'); q('.judge-boosts').classList.add('done');
     q('.judge-side.you').classList.remove('strut', 'aura');
     q('.judge-side.you').classList.add(passed ? 'win' : 'lose'); q('.judge-side.them').classList.add(passed ? 'lose' : 'win');
     q('.judge-result').textContent = passed ? (grade === 'S' ? 'Perfect win!' : 'You win!') : 'So close!';
     q('.judge-grade').textContent = grade; q('.judge-grade').dataset.grade = grade;
-    q('.judge-tally').textContent = `${mine} to ${d.total.them}`;
+    q('.judge-tally').textContent = tb ? (tb.why === 'line' ? `Equal scores, so ${tb.label} decided it: ${mine} to ${theirs}` : `Equal scores, so the tiebreak point went to ${d.them.name}: ${mine} to ${theirs}`) : `${mine} to ${theirs}`;
     q('.judge-final').hidden = false;
     q('.judge-skip').textContent = 'Continue';
     if (node.contains(document.activeElement) && document.activeElement !== q('.judge-skip')) q('.judge-skip').focus({ preventScroll: true });   // the boosts are finished
@@ -156,7 +166,8 @@ export function playJudging(d, done) {
   // the board for this brief: shown for a moment, then the show closes by itself
   function board() {
     if (phase === 'board') return;
-    const b = d.board ? d.board(totalWith(bonus)) : null;
+    const fin = settle(bonus);
+    const b = d.board ? d.board(fin.mine, fin.them) : null;
     if (!b) { end(); return; }
     phase = 'board';
     for (const t of timers.splice(0)) clearTimeout(t);

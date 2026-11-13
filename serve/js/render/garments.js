@@ -780,20 +780,25 @@ export function headwear(p = {}) {
   const { type = 'cap', fill = '#111', accent = '#fff', z = Z.headwear } = p;
   const L = [];
   switch (type) {
+    // Hats sit on the hair, above the brows (y 66 in head coordinates): the lowest edge of a brim stops at about 72,
+    // just over the top of the eyes, and a crown is as wide as the hair under it (138 to 222).
     case 'cap':
-      L.push({ z, d: spline([[146, 78], [150, 48], [166, 34], [180, 30], [194, 34], [210, 48], [214, 78], [180, 72]], true, 0.9), fill });
-      L.push({ z: z + 0.1, d: spline([[140, 80, 'c'], [180, 74], [220, 80, 'c'], [180, 96]], true, 0.9), fill, shadeMore: true });
+      L.push({ z, d: spline([[139, 62], [141, 40], [156, 20], [180, 13], [204, 20], [219, 40], [221, 62], [180, 56]], true, 0.9), fill });
+      L.push({ z: z + 0.05, d: `M180,14 L180,56 M161,18 Q155,38 154,58 M199,18 Q205,38 206,58`, fill: 'none', stroke: 'rgba(0,0,0,.16)', sw: 1, isLine: true });
+      L.push({ z: z + 0.06, d: `M180,13 m-3,0 a3,2.2 0 1,0 6,0 a3,2.2 0 1,0 -6,0`, fill, shadeMore: true, noShadow: true });
+      L.push({ z: z + 0.1, d: spline([[138, 62, 'c'], [180, 55], [222, 62, 'c'], [212, 69], [180, 72], [148, 69]], true, 0.8), fill, shadeMore: true });
       break;
     case 'beanie':
-      L.push({ z, d: spline([[144, 96], [146, 50], [160, 26], [180, 16], [200, 26], [214, 50], [216, 96], [180, 90]], true, 0.9), fill });
-      L.push({ z: z + 0.1, d: `M144,80 L216,80 M144,90 L216,90`, fill: 'none', stroke: 'rgba(0,0,0,.22)', sw: 1, isLine: true });
+      L.push({ z, d: spline([[138, 64], [139, 40], [154, 16], [180, 8], [206, 16], [221, 40], [222, 64], [180, 58]], true, 0.9), fill });
+      L.push({ z: z + 0.1, d: spline([[137, 51, 'c'], [180, 44], [223, 51, 'c'], [223, 65, 'c'], [180, 59], [137, 65, 'c']], true, 0.7), fill, shadeMore: true });
+      L.push({ z: z + 0.2, d: [146, 157, 168, 180, 192, 203, 214].map((x) => `M${x},${(51 - 7 * (1 - Math.pow((x - 180) / 43, 2))).toFixed(1)} L${x},${(65 - 6 * (1 - Math.pow((x - 180) / 43, 2))).toFixed(1)}`).join(' '), fill: 'none', stroke: 'rgba(0,0,0,.16)', sw: 1, isLine: true });
       break;
     case 'beret':
       L.push({ z, d: spline([[138, 70], [150, 34], [190, 20], [228, 36], [232, 58], [210, 66], [180, 62], [150, 72]], true, 0.9), fill });
       break;
     case 'bucket':
-      L.push({ z, d: spline([[148, 74], [152, 44], [168, 32], [180, 30], [192, 32], [208, 44], [212, 74], [180, 70]], true, 0.9), fill });
-      L.push({ z: z + 0.1, d: spline([[136, 92, 'c'], [148, 70, 'c'], [212, 70, 'c'], [224, 92, 'c'], [180, 100]], true, 0.6), fill, shadeMore: true });
+      L.push({ z, d: spline([[146, 54], [149, 30], [165, 16], [180, 14], [195, 16], [211, 30], [214, 54], [180, 50]], true, 0.9), fill });
+      L.push({ z: z + 0.1, d: spline([[128, 68, 'c'], [146, 51, 'c'], [180, 47], [214, 51, 'c'], [232, 68, 'c'], [180, 73]], true, 0.6), fill, shadeMore: true });
       break;
     case 'bow':
       L.push({ z, d: `M${CX + 28},44 q-16,-18 -10,2 q6,20 10,-2 q16,-18 10,2 q-6,20 -10,-2Z`, fill });
@@ -807,18 +812,18 @@ export function headwear(p = {}) {
       L.push({ z, d: `M148,74 q32,-52 64,0`, fill: 'none', stroke: fill, sw: 9, isLine: true });
       break;
     case 'visor':
-      L.push({ z, d: spline([[140, 76, 'c'], [180, 68], [220, 76, 'c'], [180, 92]], true, 0.9), fill });
-      L.push({ z: z + 0.1, d: `M146,74 q34,-10 68,0`, fill: 'none', stroke: fill, sw: 5, isLine: true });
+      L.push({ z, d: spline([[138, 62, 'c'], [180, 55], [222, 62, 'c'], [212, 69], [180, 72], [148, 69]], true, 0.8), fill });
+      L.push({ z: z + 0.1, d: `M140,61 q40,-13 80,0`, fill: 'none', stroke: fill, sw: 6, isLine: true });
       break;
     case 'cowboyhat':
-      L.push({ z, d: spline([[150, 70], [154, 36], [180, 26], [206, 36], [210, 70], [180, 64]], true, 0.9), fill });
-      L.push({ z: z + 0.1, d: spline([[122, 64, 'c'], [150, 72], [180, 68], [210, 72], [238, 64, 'c'], [220, 84], [180, 90], [140, 84]], true, 0.7), fill, shadeMore: true });
+      L.push({ z, d: spline([[149, 54], [152, 22], [167, 11], [180, 15], [193, 11], [208, 22], [211, 54], [180, 49]], true, 0.9), fill });
+      L.push({ z: z + 0.1, d: spline([[112, 48, 'c'], [146, 57], [180, 53], [214, 57], [248, 48, 'c'], [228, 66], [180, 72], [132, 66]], true, 0.7), fill, shadeMore: true });
       break;
     case 'claw':
       L.push({ z, d: `M${CX + 36},46 l10,-6 l6,10 l-8,8 Z M${CX + 40},40 l4,-12 l6,8`, fill });
       break;
     default:
-      L.push({ z, d: spline([[146, 78], [150, 48], [166, 34], [180, 30], [194, 34], [210, 48], [214, 78], [180, 72]], true, 0.9), fill });
+      L.push({ z, d: spline([[139, 62], [141, 40], [156, 20], [180, 13], [204, 20], [219, 40], [221, 62], [180, 56]], true, 0.9), fill });
   }
   return L;
 }

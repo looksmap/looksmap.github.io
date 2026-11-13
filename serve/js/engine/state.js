@@ -5,7 +5,7 @@ import { CHAPTERS, NOVELS, chaptersOf, buildLevels } from '../data/chapters.js';
 import { TWISTS } from '../data/briefs.js';
 import { SWATCHES, COLORWAYS, PRINTS } from '../data/generator.js';
 import { scoreLook, DIMS } from './score.js';
-import { opponentFor, gradeByMargin, BOTS } from './bots.js';
+import { opponentFor, gradeByMargin, BOTS, tieBreak } from './bots.js';
 
 export const { levels: LEVELS, order: LEVEL_ORDER } = buildLevels(SETS);
 export { CHAPTERS, NOVELS, chaptersOf, SETS, SET_BY_ID, SWATCHES };
@@ -426,6 +426,19 @@ export function applyBonus(r, bonus) {
   if (add) { r.total = Math.max(r.total, Math.min(r.cap ?? 100, r.total + add)); r.boost = add; }   // a capped outfit stays capped
   return add;
 }
+// Equal totals are settled here (see tieBreak): the winner's total goes up by one. Returns the rival as judged.
+function settleTie(r, opp) {
+  const t = tieBreak(r.dims, opp.dims, r.total, opp.total, r.cap ?? 100);
+  if (!t) return opp;
+  r.tiebreak = t;
+  const who = opp.bot.name;
+  r.critique.unshift(t.why === 'same' ? `The totals were equal and so was every line, so the tiebreak point went to ${who}, whose outfit was judged first.`
+    : t.why === 'ceiling' ? `The totals were equal. Your outfit could not score any higher on this brief, so the tiebreak point went to ${who}.`
+    : t.you ? `The totals were equal, so the first line where you differed decided it. You scored higher on ${t.label} and won the tiebreak point.`
+    : `The totals were equal, so the first line where you differed decided it. ${who} scored higher on ${t.label} and won the tiebreak point.`);
+  if (t.you) { r.total += 1; return opp; }
+  return { ...opp, total: opp.total + 1 };
+}
 // Whether a level can be sent for judging right now, without spending anything.
 export function canSubmit(brief) {
   const mode = brief.mode || 'normal';
@@ -486,9 +499,9 @@ export function submit(look, brief, extra = {}) {
   const prev = S.results[key] || {};
   const prevMode = prev[mode] || R0();
   // judged against another stylist at about your level; the margin decides the grade
-  const opp = opponentFor(brief, { level: S.level, skill: S.skill, mode, attempt: prevMode.attempts || 0 });
+  const opp = settleTie(r, opponentFor(brief, { level: S.level, skill: S.skill, mode, attempt: prevMode.attempts || 0 }));
   const margin = r.total - opp.total;
-  const passed = margin >= 0;
+  const passed = margin > 0;
   r.grade = gradeByMargin(margin, r.total, brief.pass);
   const firstPass = passed && !prevMode.passed;
   const firstEver = passed && !levelCleared(key) && mode !== 'easy';
@@ -538,8 +551,9 @@ export function submit(look, brief, extra = {}) {
 export function judgeAgainst(look, brief, opp, bonus) {
   const r = evaluate(wearable(look), brief);
   applyBonus(r, bonus);
+  opp = settleTie(r, opp);
   const margin = r.total - opp.total;
-  return { ...r, ok: true, passed: margin >= 0, firstPass: false, pass: brief.pass, grade: gradeByMargin(margin, r.total, brief.pass),
+  return { ...r, ok: true, passed: margin > 0, firstPass: false, pass: brief.pass, grade: gradeByMargin(margin, r.total, brief.pass),
     rewards: { credits: 0, thread: 0, items: [], swatches: {}, bonus: [], xp: 0, levelUps: [], perfectNow: false, firstS: false, mode: 'normal', opponent: opp, margin } };
 }
 // A friend's outfit as the rival. Their pieces are looked up here and scored by this game, so nothing in a link is trusted.
