@@ -6,7 +6,7 @@
 // `payments/setup-stripe.mjs --write` fills `links` and `mode` from your Stripe account.
 export const PAYMENTS = {
   env: 'live',            // 'test' or 'live', set by the setup script
-  worker: '',         // e.g. 'https://serve-pay.your-account.workers.dev'
+  worker: 'https://serve-pay.serve-pay.workers.dev',         // e.g. 'https://serve-pay.your-account.workers.dev'
   links: {
       "t1": "https://buy.stripe.com/dRmdRac0x5sCbit3T3fIs00",
       "t2": "https://buy.stripe.com/dRmcN6e8Fg7gcmx1KVfIs01",
