@@ -45,13 +45,29 @@ const fresh = () => ({
 let S = load();
 let OWNED = new Set(S.owned);
 
+// False in private modes that block storage: the game still runs, but nothing is kept, so the shop refuses real purchases.
+export const storageOK = (() => { try { localStorage.setItem('serve.probe', '1'); localStorage.removeItem('serve.probe'); return true; } catch (e) { return false; } })();
+// Keep a saved value only where it has the same shape as the default, so an old or damaged save cannot crash the game.
+function mergeSave(def, got) {
+  const out = { ...def };
+  for (const k of Object.keys(got)) {
+    const d = def[k], g = got[k];
+    if (!(k in def) || d === null) { out[k] = g; continue; }
+    if (Array.isArray(d)) out[k] = Array.isArray(g) ? g : d;
+    else if (typeof d === 'object') out[k] = g && typeof g === 'object' && !Array.isArray(g) ? mergeSave(d, g) : d;
+    else out[k] = typeof g === typeof d && !(typeof g === 'number' && !Number.isFinite(g)) ? g : d;
+  }
+  return out;
+}
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) { const parsed = JSON.parse(raw); return { ...fresh(), ...parsed }; }
+    if (raw) { const parsed = JSON.parse(raw); if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return mergeSave(fresh(), parsed); }
   } catch (e) { /* storage may be unavailable */ }
   return fresh();
 }
+// Another tab saved: take its copy, so this tab does not overwrite it with older numbers.
+if (typeof window !== 'undefined' && window.addEventListener) window.addEventListener('storage', (e) => { if (e.key === KEY && e.newValue) { S = load(); OWNED = new Set(S.owned); for (const fn of listeners) fn(S); } });
 export function save() {
   S.owned = [...OWNED];
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ }
@@ -65,6 +81,7 @@ export function reset() { S = fresh(); OWNED = new Set(S.owned); save(); }
 export function energy() {
   const now = Date.now();
   const max = maxEnergy();
+  if (S.energyAt > now) S.energyAt = now; // the device clock moved backwards
   const gained = Math.floor((now - S.energyAt) / ENERGY.regenMs);
   if (gained > 0 && S.energy < max) { S.energy = Math.min(max, S.energy + gained); S.energyAt = S.energyAt + gained * ENERGY.regenMs; }
   if (S.energy >= max) S.energyAt = now;
@@ -369,18 +386,18 @@ export function levelBrief(levelId, mode = 'normal') {
   };
   if (mode === 'easy') {
     out.pass = lv.easyPass; out.tolerance = (lv.tolerance ?? 1) + 1; out.assist = true;
-    out.adapt = { kind: 'easy', text: 'Easy: a gentle rival, a looser dress code, live hints on', bonus: 0 };
+    out.adapt = { kind: 'easy', text: 'Easy mode: an easier rival, a looser dress code and live hints', bonus: 0 };
   } else if (mode === 'hard') {
     out.pass = lv.hardPass;
-    addTwist(TWISTS[(hashStr(lv.id) + 1) % TWISTS.length], 'hard', 'Hard: a sharp rival, plus a twist. Fabric drops here.');
+    addTwist(TWISTS[(hashStr(lv.id) + 1) % TWISTS.length], 'hard', 'Hard mode: a tougher rival and one extra rule. You can win fabric here');
   } else if (mode === 'secret') {
-    addTwist(TWISTS[(hashStr(lv.id) + 2) % TWISTS.length], 'secret', 'Secret: the strictest rival, a twist, and the exclusive set, one piece per clear.');
+    addTwist(TWISTS[(hashStr(lv.id) + 2) % TWISTS.length], 'secret', 'Secret level: the toughest rival and one extra rule. Each win gives you one piece of the exclusive set');
   } else if (lv.tutorial) {
     /* the first level stays exactly as written */
   } else if (S.skill >= lv.pass + 12 && !r.passed && Object.values(S.results).filter((x) => x.normal?.passed).length >= 3) {
     addTwist(TWISTS[(hashStr(lv.id) + S.history.length) % TWISTS.length], 'twist', TWISTS[(hashStr(lv.id) + S.history.length) % TWISTS.length].text, 100);
   } else if ((r.failsInRow || 0) >= 2 && !r.passed) {
-    out.pass = Math.max(50, lv.pass - 5); out.assist = true; out.adapt = { kind: 'assist', text: 'A gentler rival this time, and live hints on', bonus: 0 };
+    out.pass = Math.max(50, lv.pass - 5); out.assist = true; out.adapt = { kind: 'assist', text: 'An easier rival this time, with live hints turned on', bonus: 0 };
   }
   return out;
 }
@@ -388,10 +405,10 @@ function hashStr(s) { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt
 
 export function evaluate(look, brief) {
   const r = scoreLook(look, brief);
-  if (brief.twist?.test && !brief.twist.test(look)) { r.twistFailed = true; r.total = Math.max(0, r.total - 10); r.critique.unshift(`Twist missed: ${brief.twist.text}.`); }
+  if (brief.twist?.test && !brief.twist.test(look)) { r.twistFailed = true; r.total = Math.max(0, r.total - 10); r.critique.unshift(`You missed the extra rule: ${brief.twist.text.toLowerCase()}.`); }
   if (brief.forbid?.prints && Object.values(look).some((i) => i && i.print)) { r.total = Math.max(0, r.total - 8); r.critique.unshift('The brief said no prints.'); }
   if (brief.forbid?.heels && look.shoes && look.shoes.heel > 0) { r.total = Math.max(0, r.total - 8); r.critique.unshift('The brief said flats only.'); }
-  if (brief.maxWeight && Object.values(look).some((i) => i && i.weight > brief.maxWeight && ['top', 'bottom', 'dress', 'outer', 'shoes'].includes(i.slot))) { r.total = Math.max(0, r.total - 8); r.critique.unshift('Nothing heavier than linen, the brief said.'); }
+  if (brief.maxWeight && Object.values(look).some((i) => i && i.weight > brief.maxWeight && ['top', 'bottom', 'dress', 'outer', 'shoes'].includes(i.slot))) { r.total = Math.max(0, r.total - 8); r.critique.unshift('The brief said nothing heavier than linen.'); }
   if (brief.exactAccessories && ['head', 'hairAcc', 'eyes', 'ears', 'neck', 'bracelet', 'belt', 'gloves', 'scarf', 'handheld', 'bag'].filter((s) => look[s]).length !== brief.exactAccessories) { r.total = Math.max(0, r.total - 6); r.critique.unshift(`The brief asked for exactly ${brief.exactAccessories} accessories.`); }
   return r;
 }
@@ -399,6 +416,9 @@ export function evaluate(look, brief) {
 export function submit(look, brief) {
   const mode = brief.mode || 'normal';
   const M = MODES[mode] || MODES.normal;
+  if (!Object.hasOwn(LEVELS, brief.id) || !modeUnlocked(brief.id, mode)) return { ok: false, reason: 'locked' };
+  // only pieces the player owns can be worn; hair is part of the avatar
+  look = Object.fromEntries(Object.entries(look).filter(([k, v]) => v && (k === 'hair' || OWNED.has(v.id))));
   const cost = brief.tutorial ? 0 : M.cost;
   if (mode === 'hard' && !fabricRuns(brief.id).left) return { ok: false, reason: 'attempts' };
   if (cost && !spendEnergy(cost)) return { ok: false, reason: 'energy' };
@@ -419,11 +439,12 @@ export function submit(look, brief) {
   const perfectBefore = chapterPerfect(ch);
   const rewards = { credits: 0, thread: 0, items: [], swatches: {}, bonus: [], xp: 0, levelUps: [], perfectNow: false, firstS, mode, opponent: opp, margin };
   if (passed) {
-    const mult = firstPass ? 1 : 0.3;
+    // the free first level pays once; replaying it earns nothing, so it cannot be farmed
+    const mult = firstPass ? 1 : brief.tutorial ? 0 : 0.3;
     let credits = Math.round(brief.credits * M.credit * mult);
-    if (r.grade === 'S') { credits = Math.round(credits * 1.5); rewards.bonus.push("Editor's pick +50%"); }
-    else if (r.grade === 'A') { credits = Math.round(credits * 1.2); rewards.bonus.push('Booked +20%'); }
-    if (brief.adapt?.kind === 'twist' && !r.twistFailed && firstPass) { credits += brief.adapt.bonus; rewards.bonus.push(`Twist +${brief.adapt.bonus}`); }
+    if (credits && r.grade === 'S') { credits = Math.round(credits * 1.5); rewards.bonus.push('S grade bonus +50%'); }
+    else if (credits && r.grade === 'A') { credits = Math.round(credits * 1.2); rewards.bonus.push('A grade bonus +20%'); }
+    if (brief.adapt?.kind === 'twist' && !r.twistFailed && firstPass) { credits += brief.adapt.bonus; rewards.bonus.push(`Extra rule bonus +${brief.adapt.bonus}`); }
     rewards.credits = credits; S.credits += credits;
     // drops: the level's piece the first time it is cleared on normal or hard; the secret level drops its set one piece per clear
     if (mode === 'secret') { const nextPiece = (brief.drops || []).find((id) => !OWNED.has(id)); if (nextPiece && grantSilently(nextPiece)) rewards.items.push(nextPiece); }
@@ -444,7 +465,7 @@ export function submit(look, brief) {
   if (firstEver && ch && chapterCleared(ch) && !S.chapterBonus[ch.id]) { S.chapterBonus[ch.id] = true; S.thread += 90; rewards.thread += 90; rewards.bonus.push(`Chapter ${ch.number} cleared: +90 Thread`); }
   if (ch && !perfectBefore && chapterPerfect(ch) && !S.perfectBonus[ch.id]) { S.perfectBonus[ch.id] = true; S.thread += 150; rewards.thread += 150; rewards.perfectNow = true; rewards.bonus.push('Perfect chapter: +150 Thread, secret level open'); }
   if (!brief.tutorial) S.skill = Math.round((S.skill * 0.7 + r.total * 0.3) * 10) / 10;
-  const xp = Math.round((passed ? (firstPass ? 40 + r.total / 5 : 8 + r.total / 8) : 4 + r.total / 10) * M.xp);
+  const xp = brief.tutorial && prevMode.passed ? 0 : Math.round((passed ? (firstPass ? 40 + r.total / 5 : 8 + r.total / 8) : 4 + r.total / 10) * M.xp);
   rewards.xp = xp;
   rewards.levelUps = gainXP(xp);
   rewards.perfect = perfectCount(ch);
@@ -457,8 +478,10 @@ function grantSilently(id) { if (!OWNED.has(id) && BY_ID[id]) { OWNED.add(id); r
 const GR = { D: 0, C: 1, B: 2, A: 3, S: 4 };
 const betterGrade = (a, b) => (!a ? b : GR[b] > GR[a] ? b : a);
 function touchStreak() {
-  const today = new Date().toISOString().slice(0, 10);
-  const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  // local calendar days, the same clock the daily gifts use
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const today = iso(new Date());
+  const y = iso(new Date(Date.now() - 86400000));
   if (S.lastDay === today) return;
   S.streak = S.lastDay === y ? S.streak + 1 : 1;
   S.lastDay = today;
@@ -472,6 +495,8 @@ export function saveLook(look, name, score, briefId) {
 }
 export function deleteLook(id) { S.looks = S.looks.filter((l) => l.id !== id); save(); }
 export const hydrate = (items) => Object.fromEntries(Object.entries(items).map(([k, id]) => [k, item(id)]).filter(([, v]) => v));
+// the same, keeping only pieces the player still owns (a saved look may hold something that was dismantled since)
+export const hydrateOwned = (items) => Object.fromEntries(Object.entries(hydrate(items)).filter(([k, v]) => k === 'hair' || OWNED.has(v.id)));
 
 /* ---------------- capsule (honest blind box) ---------------- */
 export const CAPSULE = {
@@ -499,11 +524,19 @@ export function pullCapsule() {
 
 /* ---------------- drops (limited sets in the atelier) ---------------- */
 export const DROPS = SETS.filter((s) => ['after_dark', 'chrome_season', 'le_smoking', 'gothic_romance'].includes(s.id)).map((s, i) => ({ id: s.id, house: s.house, title: s.name, line: s.line, items: s.pieceIds, setThread: (9 + i) * 30, endsIn: (3 + i * 2) * 86400000 + 4 * 3600000, returns: `Chapter ${String(9 + i).padStart(2, '0')}` }));
+// one price function for the shop label and the charge, so they can never disagree
+export function dropSetPrice(dropId) {
+  const d = DROPS.find((x) => x.id === dropId);
+  if (!d) return 0;
+  const missing = d.items.filter((id) => !OWNED.has(id)).length;
+  return missing ? Math.max(30, Math.round((d.setThread * (missing / d.items.length)) / 10) * 10) : 0;
+}
 export function buyDropSet(dropId) {
   const d = DROPS.find((x) => x.id === dropId);
+  if (!d) return { ok: false, reason: 'owned' };
   const missing = d.items.filter((id) => !OWNED.has(id));
   if (!missing.length) return { ok: false, reason: 'owned' };
-  const price = Math.max(1, Math.round(d.setThread * (missing.length / d.items.length)));
+  const price = dropSetPrice(dropId);
   if (S.thread < price) return { ok: false, reason: 'funds', price };
   S.thread -= price; for (const id of missing) OWNED.add(id); save();
   return { ok: true, price, items: missing };

@@ -1,6 +1,19 @@
 // Sends the game's events (js/engine/track.js) to GoatCounter: no cookies, no personal data, no IP stored.
 // Set GOATCOUNTER to your site code (the "serve" in serve.goatcounter.com) to turn it on; empty means nothing is sent.
 // Events become paths in the GoatCounter dashboard, e.g. brief/b012/normal/pass or checkout/paid/t2.
+// A return from checkout carries the Stripe session id in the address (?paid=...). It is moved into this tab's own
+// storage before the analytics script loads, so it is never sent to GoatCounter; engine/payments.js reads it from there.
+(function () {
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('paid') || q.get('cancelled')) {
+      sessionStorage.setItem('serve.return', location.search);
+      q.delete('paid'); q.delete('sku'); q.delete('cancelled');
+      var rest = q.toString();
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    }
+  } catch (e) { /* storage blocked: payments.js falls back to the address */ }
+})();
 (function () {
   var GOATCOUNTER = 'serve';
   if (!GOATCOUNTER) return;

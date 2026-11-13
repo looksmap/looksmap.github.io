@@ -66,10 +66,18 @@ export function opponentFor(brief, { level = 1, skill = 68, mode = 'normal', att
   const jitter = ((hashStr(seed + 'j') % 7) - 3);
   const skillAdj = Math.max(-6, Math.min(6, (skill - 68) * 0.25));
   const modeAdj = mode === 'easy' ? -3 : mode === 'hard' ? 1 : mode === 'secret' ? 2 : 0;
-  const target = Math.max(30, Math.min(97, Math.round(brief.pass + skillAdj + modeAdj + jitter)));
-  const base = Math.max(1, real.total || 1);
-  const f = target / base;
-  const dims = real.dims.map((d) => ({ key: d.key, label: d.label, max: d.max, score: Math.max(0, Math.min(d.max, Math.round(d.score * f))) }));
+  // never above 88: an S needs a win by 10, so a rival at 91 or more would make an S impossible
+  const target = Math.max(30, Math.min(88, Math.round(brief.pass + skillAdj + modeAdj + jitter)));
+  // scale the rival's real line-by-line scores so they add up to the target exactly
+  const sum = Math.max(1, real.dims.reduce((a, d) => a + d.score, 0));
+  const dims = real.dims.map((d) => ({ key: d.key, label: d.label, max: d.max, score: Math.max(0, Math.min(d.max, Math.round((d.score || d.max * 0.5) * (target / sum)))) }));
+  for (let guard = 0; guard < 200; guard++) {
+    const diff = target - dims.reduce((a, d) => a + d.score, 0);
+    if (!diff) break;
+    const pick = dims.filter((d) => (diff > 0 ? d.score < d.max : d.score > 0)).sort((a, b) => (diff > 0 ? (b.max - b.score) - (a.max - a.score) : b.score - a.score))[0];
+    if (!pick) break;
+    pick.score += diff > 0 ? 1 : -1;
+  }
   const total = dims.reduce((a, d) => a + d.score, 0);
   return { bot, look: Object.fromEntries(Object.entries(look).map(([k, v]) => [k, v.id])), total, dims, lead: real.lead, palette: real.palette, target };
 }

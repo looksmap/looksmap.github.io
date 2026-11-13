@@ -7,13 +7,13 @@ export const SKIN = {
 };
 export const EYES = { brown: '#5A341F', hazel: '#8A6430', amber: '#B8742A', green: '#4F7A4E', blue: '#4C78A8', grey: '#6E7B86', violet: '#6B4E9B', black: '#241C19' };
 
-// Anime head: wide at the cheekbone, soft taper to a small chin. Drawn in head-group coordinates (scaled up in figure.js).
+// Anime head: a round skull, soft cheeks and a small pointed chin. Drawn in head-group coordinates (scaled in figure.js).
 export function headPath() {
-  const left = [[180, 30], [156, 38], [145, 62], [144, 88], [150, 109], [165, 123], [180, 128]];
+  const left = [[180, 30], [156, 38], [145, 62], [144, 87], [149, 105], [160, 118], [172, 125.5], [180, 127.5]];
   return spline([...left, ...rev(mirror(left)).slice(1, -1)], true, 0.9);
 }
 export function earPaths() {
-  const ear = (s) => spline([[CX + s * 33, 90], [CX + s * 39, 93], [CX + s * 38, 103], [CX + s * 33, 106]], true, 0.9);
+  const ear = (s) => spline([[CX + s * 33, 89], [CX + s * 39.5, 92], [CX + s * 38.5, 103], [CX + s * 33, 107]], true, 0.9);
   return ear(-1) + ear(1);
 }
 
@@ -54,77 +54,80 @@ export function armPath(side) {
 }
 
 let seq = 0; const uid = () => (seq = (seq + 1) % 100000).toString(36);
+const n1 = (v) => Number(v.toFixed(1));
 
-// Shoujo face: large eyes set one eye-width apart, tall irises with a gradient and two catch-lights,
-// thick tapered upper lashes with a wing, thin brows, a nose that is barely there, a small soft mouth, blush.
-export function facePaths(ink, lip, eye = EYES.brown, skin = '#E0B596', makeup = {}) {
+// Anime face. Large eyes with a dark upper lash line that ends in a small wing, an iris that runs from dark at the
+// top to light at the bottom with a bright lower rim and two catch-lights, thin brows in the hair colour, a nose that
+// is only a hint, and a small mouth with a tinted lower lip. Eye centres and ear positions are fixed so glasses,
+// earrings and hats from garments.js still sit correctly.
+export function facePaths(ink, lip, eye = EYES.brown, skin = '#E0B596', makeup = {}, brow = null) {
   const id = uid();
-  const lash = makeup.liner || '#1A1214';
-  const blush = makeup.blush || 'rgba(240,110,150,.26)';
-  const shadowBand = `<path d="M${CX - 35},83 C${CX - 30},66 ${CX - 10},66 ${CX - 6},83 C${CX - 13},76 ${CX - 27},76 ${CX - 35},83Z M${CX + 35},83 C${CX + 30},66 ${CX + 10},66 ${CX + 6},83 C${CX + 13},76 ${CX + 27},76 ${CX + 35},83Z" fill="${makeup.shadow || 'rgba(236,150,190,.4)'}" opacity=".6"/>`;
+  const lash = makeup.liner || shade(ink, -0.45);
+  const blush = makeup.blush || 'rgba(244,120,150,.5)';
+  const lidTint = makeup.shadow || 'rgba(232,140,170,.34)';
+  const browCol = brow || shade(ink, -0.1);
+  const eyeDark = shade(eye, -0.62), eyeLight = shade(eye, 0.42);
   const eyeOne = (s) => {
-    const cx = CX + s * 20.5;
-    const outer = CX + s * 33, inner = CX + s * 9;
-    const top = 77, bottom = 97, mid = 88;
-    // almond with a lifted outer corner
-    const shape = `M${outer},${mid - 2} C${outer - s * 2},${top + 1} ${cx + s * 3},${top - 2} ${cx - s * 4},${top + 1} C${inner + s * 2},${top + 4} ${inner},${mid - 2} ${inner},${mid + 1} C${inner},${bottom - 3} ${cx - s * 6},${bottom} ${cx + s * 1},${bottom} C${cx + s * 10},${bottom - 1} ${outer - s * 1},${bottom - 6} ${outer},${mid - 2}Z`;
+    const cx = CX + s * 19.5;
+    const outer = cx + s * 11.2, inner = cx - s * 10.2;
+    const top = 79.2, bot = 97.6;
+    const P = (dx, y) => `${n1(cx + s * dx)},${n1(y)}`;
+    const shape = `M${n1(inner)},90.6 C${P(-8.7, 84)} ${P(-5, top)} ${P(1, top)} C${P(6.5, top)} ${P(10.2, 81.8)} ${n1(outer)},86.4 C${P(10.7, 92.6)} ${P(6, bot)} ${P(0.5, bot)} C${P(-5.5, bot)} ${P(-9.6, 95)} ${n1(inner)},90.6Z`;
+    const lashD = `M${P(-10.8, 90.2)} C${P(-9, 83.4)} ${P(-5, top - 0.9)} ${P(1, top - 0.9)} C${P(7, top - 1)} ${P(11.6, 80.6)} ${P(15.8, 81.6)} C${P(13, 83.4)} ${P(11.8, 85)} ${P(11.2, 87.4)} C${P(9.8, 83.8)} ${P(6, top + 2.3)} ${P(1, top + 2.1)} C${P(-4.6, top + 2.1)} ${P(-8.4, 85.6)} ${P(-10.8, 90.2)}Z`;
     const clip = `e${id}${s < 0 ? 'l' : 'r'}`;
-    const ix = cx + s * 0.5, iy = 88.5;
+    const ix = cx + s * 0.6, iy = 89.3;
     return `
     <clipPath id="${clip}"><path d="${shape}"/></clipPath>
-    <path d="${shape}" fill="#FFFFFF"/>
+    <path d="M${P(-11, 84)} C${P(-6, top - 7)} ${P(7, top - 7.5)} ${P(13.5, 82)} C${P(8, top - 2)} ${P(-5, top - 1.5)} ${P(-11, 84)}Z" fill="${lidTint}"/>
+    <path d="${shape}" fill="#FFFDFB"/>
     <g clip-path="url(#${clip})">
-      <path d="${shape}" fill="url(#eyeSocket)"/>
-      <ellipse cx="${ix}" cy="${iy}" rx="8.2" ry="9.8" fill="${eye}"/>
-      <ellipse cx="${ix}" cy="${iy}" rx="8.2" ry="9.8" fill="url(#iris)"/>
-      <ellipse cx="${ix}" cy="${iy + 1}" rx="3.6" ry="4.8" fill="#15100F"/>
-      <ellipse cx="${ix - s * 2.8}" cy="${iy - 4.4}" rx="2.9" ry="3.2" fill="#fff"/>
-      <circle cx="${ix + s * 3.4}" cy="${iy + 4.6}" r="1.5" fill="#fff" opacity=".9"/>
-      <ellipse cx="${ix}" cy="${iy + 7.2}" rx="5.4" ry="2.4" fill="#fff" opacity=".28"/>
-      <path d="M${outer},${top - 5} L${inner - s * 4},${top - 5} L${inner - s * 4},${mid - 1} C${inner},${top + 3} ${cx},${top + 1} ${outer},${mid - 2}Z" fill="rgba(0,0,0,.14)"/>
+      <rect x="${n1(cx - 13)}" y="${top - 1}" width="26" height="7.5" fill="#6E5A78" opacity=".2"/>
+      <ellipse cx="${n1(ix)}" cy="${iy}" rx="8.7" ry="10" fill="url(#ir${id})" stroke="${eyeDark}" stroke-width="1.1"/>
+      <ellipse cx="${n1(ix)}" cy="${iy + 0.6}" rx="3.5" ry="4.8" fill="${eyeDark}"/>
+      <path d="M${n1(ix - 6.4)},${iy + 3.6} Q${n1(ix)},${iy + 11.4} ${n1(ix + 6.4)},${iy + 3.6} Q${n1(ix)},${iy + 7.4} ${n1(ix - 6.4)},${iy + 3.6}Z" fill="${eyeLight}" opacity=".85"/>
+      <rect x="${n1(cx - 13)}" y="${top - 1}" width="26" height="6" fill="#1B1020" opacity=".3"/>
+      <ellipse cx="${n1(ix - 3.1)}" cy="${iy - 4.2}" rx="2.7" ry="3.3" fill="#fff"/>
+      <circle cx="${n1(ix + 3.6)}" cy="${iy + 4.4}" r="1.35" fill="#fff" opacity=".92"/>
     </g>
-    <path d="M${outer + s * 2},${mid - 2.5} C${outer - s * 2},${top} ${cx + s * 3},${top - 3.5} ${cx - s * 5},${top - 0.5} C${inner + s * 2},${top + 3} ${inner - s * 0.5},${mid - 4} ${inner - s * 0.5},${mid}" fill="none" stroke="${lash}" stroke-width="3.1" stroke-linecap="round"/>
-    <path d="M${outer + s * 2},${mid - 2.5} l${s * 7},-5" stroke="${lash}" stroke-width="2.6" stroke-linecap="round"/>
-    <path d="M${outer - s * 2},${top + 1} l${s * 3},-4.5 M${outer - s * 7},${top - 1} l${s * 2},-4.5 M${outer - s * 12},${top - 2.5} l${s * 1},-4.2 M${outer - s * 17},${top - 2.5} l${s * 0.2},-3.6" stroke="${lash}" stroke-width="1.5" stroke-linecap="round" opacity=".9"/>
-    <path d="M${outer - s * 2},${bottom - 4} C${cx + s * 6},${bottom + 1} ${cx - s * 4},${bottom + 0.5} ${inner + s * 1},${mid + 3}" fill="none" stroke="${lash}" stroke-width="1" opacity=".5"/>
-    <path d="M${outer - s * 2},${bottom - 2} l${s * 1.6},2.8 M${outer - s * 6.5},${bottom} l${s * 0.9},2.8 M${outer - s * 11},${bottom + 0.5} l${s * 0.3},2.6" stroke="${lash}" stroke-width="1" stroke-linecap="round" opacity=".6"/>
-    <path d="M${outer - s * 1},${top - 3} C${cx + s * 2},${top - 7} ${inner + s * 3},${top - 5} ${inner + s * 1},${top - 1}" fill="none" stroke="#fff" stroke-width="1" opacity=".35"/>
-    <path d="M${CX + s * 35},${68} C${CX + s * 28},${61.5} ${CX + s * 16},${61.5} ${CX + s * 8},${66.5}" fill="none" stroke="${shade(ink, 0.1)}" stroke-width="2.2" stroke-linecap="round" opacity=".9"/>
-    <path d="M${CX + s * 35},${68} C${CX + s * 28},${62.5} ${CX + s * 20},${62} ${CX + s * 12},${65}" fill="none" stroke="${shade(ink, 0.1)}" stroke-width="1" stroke-linecap="round" opacity=".5"/>`;
+    <path d="${lashD}" fill="${lash}"/>
+    <path d="M${P(12.4, 84.6)} l${n1(s * 3.4)},-0.6 M${P(11.6, 86.6)} l${n1(s * 2.6)},0.9" stroke="${lash}" stroke-width="1.1" stroke-linecap="round"/>
+    <path d="M${P(10.6, 88.8)} C${P(10, 93.4)} ${P(6, bot + 0.5)} ${P(1.5, bot + 0.6)}" fill="none" stroke="${lash}" stroke-width="1.05" stroke-linecap="round" opacity=".7"/>
+    <path d="M${P(-8, 83)} C${P(-4, top - 4.3)} ${P(5, top - 4.7)} ${P(10.6, top - 0.8)}" fill="none" stroke="${ink}" stroke-width=".9" stroke-linecap="round" opacity=".3"/>
+    <path d="M${P(-9.5, 70.6)} C${P(-4, 66.8)} ${P(5, 66.1)} ${P(12.2, 69.3)}" fill="none" stroke="${browCol}" stroke-width="1.9" stroke-linecap="round" opacity=".88"/>
+    <g class="blink"><path d="${shape}" fill="${skin}" stroke="${skin}" stroke-width="5" stroke-linejoin="round"/><path d="M${P(-10.4, 90.4)} Q${P(0.5, 97.8)} ${P(12.6, 88.2)}" fill="none" stroke="${lash}" stroke-width="2.2" stroke-linecap="round"/></g>`;
   };
   return `<g class="face">
-    <ellipse cx="${CX - 27}" cy="103" rx="10" ry="5" fill="${blush}"/>
-    <ellipse cx="${CX + 27}" cy="103" rx="10" ry="5" fill="${blush}"/>
-    <ellipse cx="${CX - 33}" cy="96" rx="4" ry="7" fill="#fff" opacity=".22"/>
-    <ellipse cx="${CX + 33}" cy="96" rx="4" ry="7" fill="#fff" opacity=".22"/>
-    ${shadowBand}
+    <defs>
+      <linearGradient id="ir${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${eyeDark}"/><stop offset=".48" stop-color="${eye}"/><stop offset="1" stop-color="${shade(eye, 0.22)}"/></linearGradient>
+      <radialGradient id="bl${id}"><stop offset="0" stop-color="${blush}"/><stop offset="1" stop-color="${blush}" stop-opacity="0"/></radialGradient>
+    </defs>
+    <ellipse cx="${CX - 25.5}" cy="103.5" rx="10.5" ry="6" fill="url(#bl${id})"/>
+    <ellipse cx="${CX + 25.5}" cy="103.5" rx="10.5" ry="6" fill="url(#bl${id})"/>
+    <path d="M${CX - 29},102.4 l-2.2,3.4 M${CX - 25.6},102.4 l-2.2,3.4 M${CX - 22.2},102.4 l-2.2,3.4 M${CX + 24.4},102.4 l-2.2,3.4 M${CX + 27.8},102.4 l-2.2,3.4 M${CX + 31.2},102.4 l-2.2,3.4" stroke="#E4607E" stroke-width=".8" stroke-linecap="round" opacity=".32"/>
     ${eyeOne(-1)}${eyeOne(1)}
-    <path d="M${CX},96 q1.2,4 -1.2,7" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity=".45"/>
-    <path d="M${CX + 2.5},101.5 q1.5,3.5 -1.5,4.5" fill="none" stroke="${shade(skin, -0.38)}" stroke-width="1.3" stroke-linecap="round" opacity=".6"/>
-    <path d="M${CX - 8},112.5 Q${CX - 3},110.5 ${CX},112 Q${CX + 3},110.5 ${CX + 8},112.5 Q${CX + 4},120.5 ${CX},121 Q${CX - 4},120.5 ${CX - 8},112.5Z" fill="${lip}"/>
-    <path d="M${CX - 8},112.5 Q${CX},115.5 ${CX + 8},112.5" fill="none" stroke="${shade(lip, -0.4)}" stroke-width=".9" opacity=".7"/>
-    <ellipse cx="${CX - 2}" cy="117.5" rx="2.6" ry="1.2" fill="#fff" opacity=".55"/>
-    <ellipse cx="${CX + 3}" cy="118" rx="1.2" ry=".7" fill="#fff" opacity=".4"/>
+    <path d="M${CX + 0.4},100.6 q2.2,2.2 0.2,3.6" fill="none" stroke="${shade(skin, -0.42)}" stroke-width="1.15" stroke-linecap="round" opacity=".6"/>
+    <path d="M${CX - 4.3},115 Q${CX},120 ${CX + 4.3},115 Q${CX},116.6 ${CX - 4.3},115Z" fill="${lip}" opacity=".85"/>
+    <path d="M${CX - 5.8},112.7 Q${CX - 2.6},114.7 ${CX},114 Q${CX + 2.6},114.7 ${CX + 5.8},112.7" fill="none" stroke="${shade(lip, -0.45)}" stroke-width="1.25" stroke-linecap="round"/>
+    <ellipse cx="${CX - 0.8}" cy="116.9" rx="1.6" ry=".6" fill="#fff" opacity=".6"/>
   </g>`;
 }
 
-// Soft skin modelling near the head: shadow under the chin, highlight on the cheek.
+// Cel shading near the head: a hard-edged shadow under the chin.
 export function skinShading(skin) {
-  const dark = shade(skin, -0.5);
+  const dark = shade(skin, -0.42);
   return `<g class="skinShade">
-    <path d="M${CX - 12},127 Q${CX},134 ${CX + 12},127 L${CX + 12},139 Q${CX},146 ${CX - 12},139Z" fill="${dark}" opacity=".12"/>
-    <ellipse cx="${CX - 30}" cy="98" rx="5" ry="8" fill="#fff" opacity=".10"/>
+    <path d="M${CX - 11.4},124.6 Q${CX},130.6 ${CX + 11.4},124.6 L${CX + 11.4},131 Q${CX},141 ${CX - 11.4},131Z" fill="${dark}" opacity=".3"/>
+    <path d="M${CX - 37},95 q1.5,4 0.5,8 M${CX + 37},95 q-1.5,4 -0.5,8" fill="none" stroke="${dark}" stroke-width=".9" stroke-linecap="round" opacity=".4"/>
   </g>`;
 }
 export function bodyShading(skin) {
   const dark = shade(skin, -0.5);
   return `<g class="bodyShade">
-    <path d="M${CX - 24},160 q10,6 20,2" fill="none" stroke="${dark}" stroke-width="1" opacity=".2"/>
-    <path d="M${CX + 4},162 q10,4 20,-2" fill="none" stroke="${dark}" stroke-width="1" opacity=".2"/>
-    <ellipse cx="${CX - 44}" cy="188" rx="5" ry="12" fill="#fff" opacity=".14"/>
-    <ellipse cx="${CX - 28}" cy="640" rx="4" ry="70" fill="#fff" opacity=".12"/>
-    <ellipse cx="${CX + 26}" cy="640" rx="4" ry="70" fill="#fff" opacity=".12"/>
-    <ellipse cx="${CX - 60}" cy="330" rx="3" ry="40" fill="#fff" opacity=".12"/>
+    <path d="M${CX - 26},160 q11,6 22,2" fill="none" stroke="${dark}" stroke-width="1.1" stroke-linecap="round" opacity=".28"/>
+    <path d="M${CX + 4},162 q11,4 22,-2" fill="none" stroke="${dark}" stroke-width="1.1" stroke-linecap="round" opacity=".28"/>
+    <path d="M${CX - 30},578 q5,6 10,1 M${CX + 20},578 q5,6 10,1" fill="none" stroke="${dark}" stroke-width="1" stroke-linecap="round" opacity=".22"/>
+    <ellipse cx="${CX - 30}" cy="640" rx="3" ry="62" fill="#fff" opacity=".14"/>
+    <ellipse cx="${CX + 22}" cy="640" rx="3" ry="62" fill="#fff" opacity=".14"/>
   </g>`;
 }
 

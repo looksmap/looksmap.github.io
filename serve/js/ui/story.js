@@ -24,7 +24,7 @@ export function portrait(speaker, avatar) {
   return portraitCache.get(speaker);
 }
 
-// Pim: a pincushion, rendered with the same materials as the chapter art.
+// Pim, the chihuahua.
 export function pimSVG(size = 120) { return OBJ.pim(size); }
 
 let queue = [];
@@ -37,14 +37,14 @@ function frame(avatar) {
   const c = CAST[spk] || { name: spk };
   const last = idx === queue.length - 1;
   return `<div class="story-wrap" role="dialog" aria-label="Story"><div class="scrim"></div>
-    <div class="story" data-story-next>
-      <div class="story-portrait ${spk}">${portrait(spk, avatar)}</div>
+    <div class="story" data-story-next tabindex="0" role="button" aria-label="Next line">
+      <div class="story-portrait ${spk === 'pim' ? 'pim' : spk === 'you' ? 'you' : ''}">${portrait(spk, avatar)}</div>
       <div class="story-box">
-        <div class="story-name">${esc(spk === 'you' ? (avatar?.name || 'You') : c.name)}${c.role ? `<span class="mono muted"> · ${esc(c.role)}</span>` : ''}</div>
-        <p class="story-text" id="storyText" data-full="${esc(text)}"></p>
+        <div class="story-name">${esc(spk === 'you' ? (avatar?.name || 'You') : c.name)}${c.role && spk !== 'you' ? `<span class="mono muted"> · ${esc(c.role)}</span>` : ''}</div>
+        <p class="story-text" id="storyText" data-full="${esc(text)}" aria-live="polite"></p>
         <div class="story-foot"><span class="mono muted">${idx + 1} / ${queue.length}</span><span class="story-cta">${last ? 'Continue' : 'Tap'} ${icon(last ? 'play' : 'back', 'flip')}</span></div>
+        <button class="story-skip" data-story-skip>${icon('skip')} Skip</button>
       </div>
-      <button class="story-skip" data-story-skip>${icon('skip')} Skip</button>
     </div></div>`;
 }
 
@@ -61,7 +61,7 @@ function type() {
 export function playStory(lines, avatar, done) {
   if (!lines || !lines.length) { done && done(); return; }
   queue = lines; idx = 0; onDone = done;
-  overlay(frame(avatar)); type();
+  overlay(frame(avatar)); type(); $('.story')?.focus({ preventScroll: true });
   // keep avatar for subsequent frames
   playStory.avatar = avatar;
 }
@@ -70,7 +70,7 @@ function advance() {
   if (el && el.textContent.length < el.dataset.full.length) { clearInterval(typing); el.textContent = el.dataset.full; return; }
   idx++;
   if (idx >= queue.length) { finish(); return; }
-  overlay(frame(playStory.avatar)); type();
+  overlay(frame(playStory.avatar)); type(); $('.story')?.focus({ preventScroll: true });
 }
 function finish() { clearInterval(typing); closeOverlay(); const d = onDone; onDone = null; queue = []; d && d(); }
 
@@ -78,19 +78,25 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('[data-story-skip]')) { finish(); return; }
   if (e.target.closest('[data-story-next]')) { advance(); }
 });
+document.addEventListener('keydown', (e) => {
+  if (!queue.length || !$('.story')) return;
+  if (e.key === 'Escape') { e.stopImmediatePropagation(); finish(); return; }
+  if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-story-skip]')) { e.preventDefault(); advance(); }
+}, true);
 
-// Dialogue for the generated chapters: the house's host sets the brief, Pim reacts, Ro closes. Chosen by a hash so it
-// is stable per level; the eight handwritten chapters keep their own lines.
+// Dialogue for the generated chapters: the house's host gives the brief and Pim adds a line. Chosen by a hash so it
+// is stable per level; the eight handwritten chapters keep their own lines. Every line here has to make sense for
+// any brief, so none of them names a garment, a place or a mood.
 const HOST = { NUL: 'ro', AURA: 'aurelie', SOLENE: 'vesna', VESPER: 'dido', THORNE: 'noor', KORI: 'kori', HALO: 'mara', OXIDE: 'ophelia', WILD: 'lou', ARCHIVE: 'zee' };
-const PIM_PRE = ['Gallery or not, I expect to be carried past whatever it is.', 'We are wearing the good bag, obviously.', 'If it rains, the bag needs a lid. Prioritise.', 'Blazer, please. I like a pocket.', 'Not our wedding. We will still be looked at.', 'Fringe is fine. Mud is not.', 'Pearls. Trust me, I know mothers.', 'Whatever you wear, I am the accessory.', 'Carry-on means carry me on.', 'Black, and I will behave. Mostly.', 'As if. We are dressing for the sidelines.', 'Objection sustained in advance. Show me the shoe.'];
-const RO_PRE = ['Dress for the room, not the mirror.', 'Dress like you have somewhere to be after.', 'The shoe will be judged.', 'Edit. Then edit again.', 'Weather is not an excuse. The silhouette still has to work.', 'Tailoring, with an opinion.', 'Not your wedding. Remember that.', 'Boho is a decision, not an excuse.', 'Palette discipline, please.', 'One hero, properly framed.', 'Restraint.', 'Comfortable is not the same as unconsidered.'];
-const HOST_WIN = ['The proportions do the work.', 'Exact. Not minimal. Exact.', 'Finished to the shoe. Good.', 'One hero, properly framed.', 'You read the brief. Finally.', 'Coherent from collar to heel.', 'The palette holds. Carry on.', 'Refined, not reinvented. Correct.', 'The waist is where expected.', 'Edited. I noticed. Keep going.', 'Right look. Right door.', 'Clarity. We like clarity here.'];
-const PIM_WIN = ['Ugh, perfect. Pick me up.', 'Objection overruled. This is a look!', 'The bag has room. I rest my case.', 'Carry me. We are being photographed.', 'This is a ten. I counted.', 'Brief understood. Treats are owed.', 'The shoe is correct. I checked underneath.', 'We look expensive. Lift, please.', 'Palette approved. Now the bag, open it.', 'Finished to the heel. Small paw, chef’s kiss.', 'That hem is correct. Carry me past it.', 'Totally buggin’, in the good way. Up!'];
-const RO_LOSE = ['The shoe betrays the dress.', 'Two aesthetics. One body. No.', 'Beautiful. Wrong evening entirely.', 'Mood board. Not a look.', 'Three accents is a crowd.', 'The waist has gone missing.', 'Unfinished, which is not undone.', 'Styled within an inch. Overstyled.', 'Costume. The brief said dress.', 'The references are showing. Badly.', 'Almost. Almost is not it.', 'She beat you on the shoe. It is always the shoe.'];
-const PIM_CLIENT_PRE = ['Dress me. I have a brief and I have standards.', 'Today it is my turn. Do not make me look like a dog in a jumper.', 'Read the brief. Then look at my face. Then read it again.', 'I want to be carried in and I want people to gasp.', 'Collar first. I am not an animal.', 'Four pounds of client. Treat me like forty.', 'I will sit still for forty seconds. Use them.', 'Nothing itchy. Nothing with bells. Everything else, I am open.'];
-const PIM_CLIENT_PRE2 = ['And a bag. I would like to be in a bag.', 'If there is a bow, it goes on the left. My good side.', 'Ro says less. Ro has never been a chihuahua.', 'Pink is not a colour. It is a position.', 'My ears are the silhouette. Work around them.', 'I have seen what you put on yourself. Do better for me.'];
-const PIM_CLIENT_WIN = ['Yes. This. Carry me past the mirror again.', 'Somebody said “oh my god”. They meant me. Correct.', 'I feel expensive. I feel carried. I feel seen.', 'The other dog looked. The other dog looked away.', 'Finally. A stylist who understands ears.'];
-const PIM_CLIENT_LOSE = ['No. I look like a dog in a jumper.', 'The collar is wrong and we both know it.', 'I cannot be seen in this. I am four pounds of no.', 'Her dog looked better. Her dog. Fix it.', 'One swap. I will wait. I will not wait nicely.'];
+const HOST_PRE = ['I have a new job for you.', 'Here’s your next brief.', 'I’m glad you’re here, because I need a stylist.', 'This one should be fun.', 'Are you ready for the next one?', 'I saved this brief for you.'];
+const PIM_PRE = ['I’ll be watching from the bag. Read the mood words before you pick anything!', 'Check the weather on the brief first, so we don’t end up too hot or too cold.', 'Start with the piece you like most, then choose the rest to go with it.', 'If the brief asks for a bag, please pick a comfortable one. I’ll be sitting in it.', 'Take your time. I’m happy as long as somebody carries me.', 'The first mood word matters most, so start there.', 'Don’t forget the shoes! People always notice the shoes.', 'I believe in you. I also believe there will be snacks afterwards.', 'Try a few things on before you send it. That’s my favourite part.', 'Remember to check what the brief says you must wear.', 'I had a nap, so I’m ready to help.', 'Let’s make this one an S!'];
+const HOST_WIN = ['That’s exactly what I asked for. Thank you!', 'You read the brief carefully, and it shows.', 'Everything works together, from the top down to the shoes.', 'That was the right outfit for the occasion.', 'I’d happily put that in the magazine.', 'Beautiful work. I knew I could count on you.', 'That suits the mood perfectly.', 'You made that look easy.', 'I wouldn’t change a thing.', 'That’s a clear win. Well done!'];
+const PIM_WIN = ['That was perfect! Please pick me up so I can celebrate.', 'We won! I think that earns both of us a treat.', 'I knew you’d get it. I never doubted you for a second.', 'Everyone was looking at us, and I loved it.', 'That’s a ten out of ten from me.', 'You understood the brief, so now it’s snack time.', 'I checked the shoes from down here, and they were just right.', 'We look amazing. Can we walk past the mirror again?', 'The colours were so pretty together!', 'That was your best one yet.', 'I’m so proud that my tail won’t stop wagging.', 'Another win! Carry me home, please.'];
+const HOST_LOSE = ['That wasn’t quite what the brief asked for. The notes below show what to change.', 'Your rival was a little ahead this time. One swap could be enough to win.', 'That was very close. Have a look at the notes and try again.', 'It didn’t work this time, but you’re nearly there. Check the mood words again.', 'That one missed. Read the brief once more and change one or two pieces.', 'I think you can do better than that. Look at which lines scored lowest and start there.'];
+const PIM_CLIENT_PRE = ['Today it’s my turn to be dressed! I’ve read the brief and I’m very excited.', 'Please make me look good today. I don’t want to look like a dog in a jumper.', 'Read my brief carefully, then look at my face, because I’m serious about this.', 'I’d like people to gasp when I’m carried in.', 'Let’s start with the collar. It’s the most important part.', 'I’m only four pounds, but I’m a very important client.', 'I can sit still for about forty seconds, so let’s be quick.', 'I don’t want anything itchy or anything with bells. Otherwise I’m open to ideas.'];
+const PIM_CLIENT_PRE2 = ['I’d also like a bag to ride in, if there’s one that suits.', 'If there’s a bow, please put it on my left side. That’s my best side.', 'Ro always says to wear less, but Ro has never been a chihuahua.', 'I think pink suits me, but I’ll trust you.', 'Remember that my ears are big, so choose things that work with them.', 'You always dress yourself so well. Now do the same for me!'];
+const PIM_CLIENT_WIN = ['Yes, this is the one! Please carry me past the mirror again.', 'Somebody said “oh my gosh”, and they were talking about me.', 'I feel fancy and I feel very loved.', 'The other dog looked at me, and then looked away. I won.', 'Finally, a stylist who understands ears!'];
+const PIM_CLIENT_LOSE = ['Oh no, I look like a dog in a jumper. Can we try again?', 'The collar isn’t right, and I think we both know it.', 'I can’t go out in this. Please change something.', 'The other dog looked better than me, and I can’t allow that. Please fix it.', 'Change one thing and I’ll wait here. I might sigh a little.'];
 const hashS = (str) => { let h = 2166136261; for (const ch of str) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; };
 export function storyFor(levelId) {
   if (STORY[levelId]) return STORY[levelId];
@@ -99,7 +105,7 @@ export function storyFor(levelId) {
   const h = hashS(levelId);
   const host = HOST[ch.house] || 'ro';
   const pick = (arr, k) => arr[(h >>> k) % arr.length];
-  if (lv.secret) return { pre: [['ro', `Every level. Every mode. Every S. ${ch.title} has one more brief, and it is only for you. Do not waste it.`], ['pim', 'A secret level. I have never been so awake. Carry me higher.'], [host, `${lv.copy}`]], win: [[host, 'That is the whole chapter in one look. The piece is yours.'], ['pim', 'Exclusive. Nobody else has this. I am going to be insufferable about it.']], lose: [['ro', 'The strictest brief in the chapter. One swap at a time. I have all day. You do not.']] };
+  if (lv.secret) return { pre: [['ro', `You earned an S on every level of ${ch.title}, in every mode, so there’s one more brief here that only you can play.`], ['pim', 'A secret level! I’ve never been so awake.'], [host, `${lv.copy}`]], win: [[host, 'You put the whole chapter into one outfit. This piece is yours to keep.'], ['pim', 'Nobody else has this one! I’m going to tell everybody.']], lose: [['ro', 'This is the strictest brief in the chapter. Change one piece at a time and you’ll get there.']] };
   if (ch.pim) {
     return {
       pre: [['pim', pick(PIM_CLIENT_PRE, 3)], ['ro', `${lv.copy}`], ['pim', pick(PIM_CLIENT_PRE2, 9)]],
@@ -107,10 +113,9 @@ export function storyFor(levelId) {
       lose: [['pim', pick(PIM_CLIENT_LOSE, 7)]],
     };
   }
-  const where = ch.theme ? `${ch.theme[0].toUpperCase()}${ch.theme.slice(1)}.` : '';
   return {
-    pre: [[host, `${where} ${lv.copy}`.trim()], ['pim', pick(PIM_PRE, 3)], ['ro', pick(RO_PRE, 9)]],
+    pre: [[host, `${pick(HOST_PRE, 13)} ${lv.copy}`], ['pim', pick(PIM_PRE, 3)]],
     win: [[host, pick(HOST_WIN, 5)], ['pim', pick(PIM_WIN, 11)]],
-    lose: [['ro', pick(RO_LOSE, 7)]],
+    lose: [[host, pick(HOST_LOSE, 7)]],
   };
 }

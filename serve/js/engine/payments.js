@@ -47,27 +47,47 @@ function grant(sku, usd) {
   return { ok: false, text: 'Unknown item' };
 }
 
-// called once on load; returns null when the URL carries no payment result
+// A checkout that came back but is not confirmed yet is kept here until it is, so a slow confirmation or a dropped
+// connection never loses a paid purchase. analytics.js moves ?paid= out of the address bar before anything else loads.
+const PENDING = 'serve.pendingPay';
+const readPending = () => { try { return JSON.parse(localStorage.getItem(PENDING) || 'null'); } catch (e) { return null; } };
+const writePending = (v) => { try { if (v) localStorage.setItem(PENDING, JSON.stringify(v)); else localStorage.removeItem(PENDING); } catch (e) { /* storage unavailable */ } };
+const takeStash = () => { try { const v = sessionStorage.getItem('serve.return'); sessionStorage.removeItem('serve.return'); return v || ''; } catch (e) { return ''; } };
+export const pendingPurchase = () => !!readPending();
+
+// called once on load, and again from the shop's "check again" button; returns null when there is nothing to report
 export async function handleReturn() {
-  const q = new URLSearchParams(location.search);
-  const session = q.get('paid'); const cancelled = q.get('cancelled');
-  if (!session && !cancelled) return null;
+  const q = new URLSearchParams(location.search || takeStash());
+  const cancelled = q.get('cancelled');
   const clean = () => { const u = new URL(location.href); u.searchParams.delete('paid'); u.searchParams.delete('sku'); u.searchParams.delete('cancelled'); history.replaceState(null, '', u.toString()); };
-  if (cancelled) { clean(); track('checkout_cancel'); return { ok: false, cancelled: true }; }
-  let sku = q.get('sku'); let verified = false; let usd = SKUS[sku]?.usd || 0; let amount = null;
-  if (!/^cs_(test|live)_[A-Za-z0-9]+$/.test(session)) { clean(); return { ok: false, text: 'That is not a Stripe receipt.' }; }
+  const pending = readPending();
+  const fromUrl = !!q.get('paid');
+  const session = q.get('paid') || pending?.session;
+  if (location.search) clean();
+  if (!session) { if (cancelled) { track('checkout_cancel'); return { ok: false, cancelled: true }; } return null; }
+  let sku = q.get('sku') || pending?.sku; let verified = false; let usd = SKUS[sku]?.usd || 0; let amount = null;
+  if (!/^cs_(test|live)_[A-Za-z0-9]+$/.test(session)) { writePending(null); return fromUrl ? { ok: false, text: 'That is not a Stripe receipt.' } : null; }
+  // remember it before asking the server, and give up only after three days
+  const first = pending?.session === session ? pending.at : Date.now();
+  writePending({ session, sku, at: first });
   if (PAYMENTS.worker) {
     try {
       const r = await fetch(`${PAYMENTS.worker.replace(/\/$/, '')}/verify?session_id=${encodeURIComponent(session)}`);
       const j = await r.json();
-      if (!j.paid) { clean(); track('checkout_unpaid', { sku }); return { ok: false, text: 'Stripe has not confirmed this payment yet. If you were charged, it will appear within a few minutes; reopen the shop then.' }; }
+      if (!j.paid) {
+        if (Date.now() - first > 3 * 86400000) writePending(null);
+        track('checkout_unpaid', { sku });
+        return fromUrl ? { ok: false, pending: true, text: 'Stripe has not confirmed this payment yet. Nothing is lost: the game will check again each time you open it, and add your purchase as soon as it is confirmed.' } : null;
+      }
       sku = j.sku || sku; verified = true; amount = j.amount_total; usd = amount != null ? amount / 100 : usd;
-    } catch (e) { clean(); return { ok: false, text: 'Could not reach the payment server to confirm. Your receipt from Stripe is proof of purchase; try again in a minute or write to support.' }; }
+    } catch (e) {
+      return fromUrl ? { ok: false, pending: true, text: 'The payment server could not be reached. Nothing is lost: the game will check again each time you open it. Your Stripe receipt is your proof of purchase.' } : null;
+    }
   }
-  if (!SKUS[sku]) { clean(); return { ok: false, text: 'This receipt does not match an item in the shop.' }; }
+  if (!SKUS[sku]) { writePending(null); return { ok: false, text: 'This receipt does not match an item in the shop.' }; }
   const fresh = recordReceipt({ id: session, sku, usd, verified, at: Date.now(), env: paymentsEnv() });
-  clean();
-  if (!fresh) return { ok: true, repeat: true, text: 'This purchase was already added.' };
+  writePending(null);
+  if (!fresh) return fromUrl ? { ok: true, repeat: true, text: 'This purchase was already added.' } : null;
   const g = grant(sku, usd);
   track('purchase', { sku, usd, verified, mode: paymentsMode(sku) });
   return { ok: g.ok, sku, usd, verified, text: g.text };

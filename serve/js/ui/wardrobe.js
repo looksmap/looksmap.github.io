@@ -36,7 +36,7 @@ export function itemDrawer(it, opts = {}) {
       <dt>Formality</dt><dd>${ladder(it.formality)} ${['lounge', 'casual', 'smart casual', 'polished', 'cocktail', 'formal', 'black tie'][it.formality]}</dd>
       <dt>Weight</dt><dd>${ladder(it.weight - 1, 4)} ${['heatwave', 'warm', 'mild', 'cold', 'freezing'][it.weight - 1]}</dd>
       <dt>Texture</dt><dd>${esc(it.texture)}${it.shine ? ` · shine ${it.shine}` : ' · matte'}</dd>
-      ${['top', 'bottom', 'dress', 'outer'].includes(it.slot) ? `<dt>Volume</dt><dd>${['slim', 'regular', 'oversized'][(it.volume ?? 0) + 1]}</dd>` : ''}
+      ${['top', 'bottom', 'dress', 'outer'].includes(it.slot) ? `<dt>Volume</dt><dd>${(['slim', 'regular', 'oversized', 'very full'][(it.volume ?? 0) + 1] || 'regular')}</dd>` : ''}
       <dt>Statement</dt><dd>${['supporting', 'interesting', 'hero'][it.statement]}</dd>
       ${it.sharp ? '<dt>Sharp</dt><dd>counts as structure</dd>' : ''}
       ${it.slot === 'shoes' ? `<dt>Heel · toe</dt><dd>${['flat', 'low', 'high'][it.heel]} · ${esc(it.toe)}</dd>` : ''}
@@ -78,7 +78,7 @@ function setsView(s) {
       <button class="btn small ghost" data-open-set="">← Sets</button>
       <div class="set-hero"><div class="set-fig">${renderLook(look, { ...s.avatar, hairStyle: st.hairStyle || s.avatar.hairStyle }, { depth: true, shadow: false })}</div>
         <div><div class="eyebrow">${esc(houseName(st.house))} · set · ${p.have}/${p.total}</div><h2 class="display display-l">${esc(st.name)}</h2><p class="muted" style="font-size:13px;margin-top:6px">${esc(st.line)}</p>
-        <div class="row" style="margin-top:10px">${p.complete ? (p.claimed ? '<span class="chip good">Completed · reward claimed</span>' : `<button class="btn small primary" data-claim-set="${st.id}">Claim completion · TH 2 + CR 400</button>`) : `<span class="chip">Complete for TH 2 + CR 400</span>`}<button class="btn small" data-wear-set="${st.id}">Wear what you own</button></div></div></div>
+        <div class="row" style="margin-top:10px">${p.complete ? (p.claimed ? '<span class="chip good">Completed · reward claimed</span>' : `<button class="btn small primary" data-claim-set="${st.id}">Claim your reward: 60 Thread and 400 credits</button>`) : `<span class="chip">Complete the set for 60 Thread and 400 credits</span>`}<button class="btn small" data-wear-set="${st.id}">Wear what you own</button></div></div></div>
       ${tiles(pieces, s)}
     </div>`;
   }
@@ -131,7 +131,7 @@ document.addEventListener('click', (e) => {
   const dm = t.closest('[data-dismantle]'); if (dm) { if (!dm.dataset.confirm) { dm.dataset.confirm = '1'; dm.textContent = 'Tap again to dismantle (can’t be undone)'; return; } const r = dismantle(dm.dataset.dismantle); closeOverlay(); toast(r.ok ? `Dismantled: ${Object.entries(r.swatches).map(([k, n]) => `${n} ${SWATCHES[k] || k}`).join(', ')} + CR ${r.credits}` : 'Can’t dismantle that'); rerender(); return; }
   const cr = t.closest('[data-craft]'); if (cr) { const r = craft(cr.dataset.craft); if (r.ok) { toast(`Crafted ${item(cr.dataset.craft).name}`); overlay(itemDrawer(item(cr.dataset.craft))); rerender(); } else toast('Missing swatches or credits'); return; }
   const os = t.closest('[data-open-set]'); if (os) { openSet = os.dataset.openSet || null; rerender(); return; }
-  const cs = t.closest('[data-claim-set]'); if (cs) { const r = claimSet(cs.dataset.claimSet); toast(r.ok ? 'Set complete: +TH 2, +CR 400' : 'Not complete yet'); rerender(); return; }
+  const cs = t.closest('[data-claim-set]'); if (cs) { const r = claimSet(cs.dataset.claimSet); toast(r.ok ? `Set complete! You earned ${r.thread} Thread and ${r.credits} credits` : 'Not complete yet'); rerender(); return; }
   const ws = t.closest('[data-wear-set]'); if (ws) { const st = SET_BY_ID[ws.dataset.wearSet]; const items = Object.fromEntries(st.pieceIds.filter(owns).map((id) => [item(id).slot, id])); setLook(items); navigate('#studio'); return; }
   const sw = t.closest('[data-style-with]'); if (sw) { closeOverlay(); setLook({ [item(sw.dataset.styleWith).slot]: sw.dataset.styleWith }); navigate('#studio'); return; }
   const ll = t.closest('[data-load-look]'); if (ll) { const l = state().looks.find((x) => x.id === ll.dataset.loadLook); if (l) { setLook(l.items); navigate('#studio'); } return; }

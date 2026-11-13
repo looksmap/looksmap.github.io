@@ -6,6 +6,8 @@ import { thumb } from './thumbs.js';
 import { setLevel } from './studio.js';
 import { sceneSVG, coverSVG, ribbon, WORLD, pinFill } from './mapart.js';
 import { icon } from './icons.js';
+import { MOOD_LABEL } from '../engine/moods.js';
+import { SLOTS } from '../data/catalog.js';
 import { playStory, storyFor } from './story.js';
 import { renderLook, SKIN, HAIR_COLORS, EYES } from '../render/figure.js';
 import { setAvatar, inventory } from '../engine/state.js';
@@ -27,7 +29,7 @@ const ring = (have, total, size = 34) => `<span class="ring" style="--p:${total 
 function perfectMeter(ch) {
   const p = perfectCount(ch);
   const sp = secretProgress(ch);
-  return `<div class="pm ${p.have === p.total ? 'done' : ''}"><div class="pm-head"><span>${icon('star')} <b>Perfect</b> ${p.have} of ${p.total}</span><span class="muted small">${p.have === p.total ? 'secret level open' : `${p.total - p.have} S to go`}</span></div>
+  return `<div class="pm ${p.have === p.total ? 'done' : ''}"><div class="pm-head"><span>${icon('star')} <b>Perfect</b> ${p.have} of ${p.total}</span><span class="muted small">${p.have === p.total ? 'secret level open' : `${p.total - p.have} more S to go`}</span></div>
     <div class="pm-grid" style="--n:${ch.levels.length}">${ch.levels.map((_, i) => ['easy', 'normal', 'hard'].map((m) => { const r = resultOf(`${ch.id}-${i + 1}`, m); return `<i class="${r?.grade === 'S' ? 's' : r?.passed ? 'ok' : ''}" title="Level ${i + 1} · ${MODES[m].label}"></i>`; }).join('')).join('')}</div>
     <div class="pm-foot"><span>${icon('gift')} exclusive set ${sp.owned} of ${sp.total}</span><span>${sp.cleared ? 'secret cleared' : sp.unlocked ? 'secret level open' : 'locked'}</span></div></div>`;
 }
@@ -38,7 +40,7 @@ function heroCard(s, next) {
   const look = last ? hydrate(last.items) : {};
   const fig = renderLook(look, s.avatar, { toile: true, depth: true, viewBox: '70 0 220 430', shadow: false });
   const ch = next ? CHAPTER_BY_ID[next.chapter] : null;
-  return `<section class="hero-card"><div class="fig">${fig}</div><div class="body">${next ? `<div class="kicker">${icon('pin')} Up next</div><h3>${esc(next.title)}</h3><p class="muted small">${esc(ch.title)} · level ${next.index} · pass ${next.pass}</p><div class="foot"><span class="meta">${next.tutorial ? 'Free' : `${icon('bolt')} ${ENERGY.cost}`} · ${icon('coin')} ${next.credits} · Lv ${s.level}</span><button class="btn small primary" data-open-level="${next.id}">Play</button></div>` : (() => { const gated = CHAPTERS.find((c) => !chapterCleared(c)); return gated ? `<div class="kicker">${icon('lock')} Level ${gated.minLevel} opens ${esc(gated.title)}</div><h3>You are level ${s.level}.</h3><p class="muted small">Replay levels, go for S on hard, or run fabric runs for XP.</p><div class="foot"><span class="meta">${icon('bolt')} ${ENERGY.cost} · ${icon('star')} ${s.xp} XP</span><button class="btn small primary" data-chapter="${CHAPTER_BY_ID[gated.unlock]?.id || 'c1'}">Replay</button></div>` : `<div class="kicker">${icon('crown')} Every chapter cleared</div><h3>Now make them perfect.</h3><div class="foot"><span class="meta">streak ${s.streak}</span><a class="btn small primary" href="#studio">Studio</a></div>`; })()}${s.streak > 1 ? `<div class="meta">${icon('fire')} Day ${s.streak}. Pim respects you now.</div>` : ''}</div></section>`;
+  return `<section class="hero-card"><div class="fig">${fig}</div><div class="body">${next ? `<div class="kicker">${icon('pin')} Up next</div><h3>${esc(next.title)}</h3><p class="muted small">${esc(ch.title)} · level ${next.index} · pass ${next.pass}</p><div class="foot"><span class="meta">${next.tutorial ? 'Free' : `${icon('bolt')} ${ENERGY.cost}`} · ${icon('coin')} ${next.credits} · Lv ${s.level}</span><button class="btn small primary" data-open-level="${next.id}">Play</button></div>` : (() => { const gated = CHAPTERS.find((c) => !chapterCleared(c)); return gated ? `<div class="kicker">${icon('lock')} Level ${gated.minLevel} opens ${esc(gated.title)}</div><h3>You are level ${s.level}.</h3><p class="muted small">Replay levels, go for S on hard, or run fabric runs for XP.</p><div class="foot"><span class="meta">${icon('bolt')} ${ENERGY.cost} · ${icon('star')} ${s.xp} XP</span><button class="btn small primary" data-chapter="${CHAPTER_BY_ID[gated.unlock]?.id || 'c1'}">Replay</button></div>` : `<div class="kicker">${icon('crown')} Every chapter cleared</div><h3>Now try for an S on every level.</h3><div class="foot"><span class="meta">streak ${s.streak}</span><a class="btn small primary" href="#studio">Studio</a></div>`; })()}${s.streak > 1 ? `<div class="meta">${icon('fire')} You’ve played ${s.streak} days in a row!</div>` : ''}</div></section>`;
 }
 function novelCard(n) {
   const p = novelProgress(n.id);
@@ -56,9 +58,11 @@ function homeLook(s) {
   if (last) return hydrate(last.items);
   return hydrate({ top: 't_tee', bottom: 'b_jeans', shoes: 's_ballet', hair: `hr_${(s.avatar.hairStyle || 'longWavy').replace(/[A-Z]/g, (m) => '_' + m.toLowerCase())}` });
 }
+// what the model wears on the very first screen, before the player owns anything
+const INTRO_LOOK = { dress: 'd_babydoll', shoes: 's_maryjane', head: 'hd_bow', neck: 'nk_ribbon', hair: 'hr_long_wavy' };
 function home(s) {
   const next = nextOpenLevel();
-  if (!s.seen.intro) return `<section class="intro">${coverSVG('c1', 360, 250, { label: false, ns: '-intro' })}<div class="intro-body"><h1 class="display display-xl">Serve</h1><p>Answer the brief. Beat the room.</p><button class="btn primary block" data-start-tutorial>${icon('play')} Start</button><p class="muted small">Two minutes with Ro and Pim, then the city.</p></div></section>`;
+  if (!s.seen.intro) return `<section class="intro"><div class="intro-stage">${coverSVG('c1', 360, 330, { label: false, ns: '-intro' })}<div class="intro-fig">${renderLook(hydrate(INTRO_LOOK), s.avatar, { depth: true, shadow: false, viewBox: '30 0 300 500', label: 'Your model' })}</div></div><div class="intro-body"><h1 class="display display-xl">Serve</h1><p>Dress your model for every occasion and see how your outfit scores.</p><button class="btn primary block" data-start-tutorial>${icon('play')} Start</button><p class="muted small">Your first outfit takes about two minutes.</p></div></section>`;
   const ch = next ? CHAPTER_BY_ID[next.chapter] : null;
   const o = overall();
   const name = s.avatar.name;
@@ -70,7 +74,7 @@ function home(s) {
     <div class="me-card">
       <div class="me-name"><h1 class="display">${name ? esc(name) : 'Name her'}</h1><button class="btn small ghost" data-edit-avatar>${name ? 'Customise' : 'Pick a name'}</button></div>
       <div class="me-meta"><span>${icon('star')} ${o.s} S of ${o.sTotal}</span><span>${icon('check')} ${o.cleared} of ${o.levels} cleared</span><span>${icon('hanger')} ${inventory().length} pieces</span></div>
-      ${next ? `<div class="me-next"><div><div class="kicker">${icon('pin')} Up next</div><b>${esc(next.title)}</b><span class="muted small">${esc(ch.title)} · level ${next.index}${next.pim ? ' · Pim’s chapter' : ''}</span></div><button class="btn primary" data-play="${next.id}">Play</button></div>` : `<div class="me-next"><div><b>Everything open is cleared.</b><span class="muted small">Replay for S on hard, or run fabric runs for XP.</span></div></div>`}
+      ${next ? `<div class="me-next"><div><div class="kicker">${icon('pin')} Up next</div><b>${esc(next.title)}</b><span class="muted small">${esc(ch.title)} · level ${next.index}${next.pim ? ' · Pim’s chapter' : ''}</span></div><button class="btn primary" data-play="${next.id}" data-play-mode="normal">Play</button></div>` : `<div class="me-next"><div><b>Everything open is cleared.</b><span class="muted small">Replay for S on hard, or run fabric runs for XP.</span></div></div>`}
     </div>
     <h2 class="lt">Novels</h2>
     <div class="novels">${NOVELS.map(novelCard).join('')}</div>
@@ -163,7 +167,7 @@ function mapView(ch, s) {
   const sres = resultOf(ch.secret, 'secret');
   const scls = sres?.passed ? 'done' : sp.unlocked ? 'open' : 'locked';
   const pc = perfectCount(ch);
-  const secretNode = `<g class="node secret ${scls}" data-level="${ch.secret}" transform="translate(${secretPos.x.toFixed(1)},${secretPos.y.toFixed(1)})" role="button" aria-label="Secret level">
+  const secretNode = `<g class="node secret ${scls}" data-level="${ch.secret}" transform="translate(${secretPos.x.toFixed(1)},${secretPos.y.toFixed(1)})" tabindex="0" role="button" aria-label="Secret level">
       <circle r="30" cy="-14" class="halo"/>
       <ellipse class="pshadow" cy="6" rx="14" ry="4"/>
       <circle class="orb" cy="-14" r="17" fill="${scls === 'locked' ? pinFill(ch.world, 'locked') : 'url(#secretGold)'}"/>
@@ -191,7 +195,7 @@ function mapView(ch, s) {
       ${ribbon(pathPts, P.dark ? '#F3D9E6' : '#FFFFFF', P.pin || P.a)}
       ${nodes}${secretNode}
     </svg></div>
-    ${next >= 0 ? `<div class="map-next"><span>${icon('pin')} Up next on ${MODES[mode].label.toLowerCase()}: <b>${esc(ch.levels[next].title)}</b></span><button class="btn small primary" data-open-level="${ch.id}-${next + 1}">Play</button></div>` : `<div class="map-next"><span>${icon('check')} ${MODES[mode].label} cleared on every level${mode !== 'hard' ? '. try the next mode.' : '. now make them all S.'}</span></div>`}
+    ${next >= 0 ? `<div class="map-next"><span>${icon('pin')} Up next on ${MODES[mode].label.toLowerCase()}: <b>${esc(ch.levels[next].title)}</b></span><button class="btn small primary" data-open-level="${ch.id}-${next + 1}">Play</button></div>` : `<div class="map-next"><span>${icon('check')} ${MODES[mode].label} cleared on every level${mode !== 'hard' ? '. Try the next mode.' : '. Now go for an S on each one.'}</span></div>`}
     <div class="panel"><div class="panel-title">${icon('set')} Sets in this chapter</div>
       <div class="set-row">${sets.map((st) => { const p = setProgress(st.id); return `<button class="set-card" data-set="${st.id}"><span class="set-thumbs">${st.pieceIds.slice(0, 3).map((id) => thumb(item(id), s.avatar)).join('')}</span><span class="set-cap"><b>${esc(st.name)}</b><span class="mono">${esc(houseName(st.house))} · ${p.have}/${p.total}</span></span></button>`; }).join('')}${(() => { const st = SET_BY_ID[`secret_${ch.id}`]; if (!st) return ''; const p = setProgress(st.id); return `<button class="set-card secret-set" data-set="${st.id}"><span class="set-thumbs">${st.pieceIds.slice(0, 3).map((id) => thumb(item(id), s.avatar)).join('')}</span><span class="set-cap"><b>${esc(st.name)}</b><span class="mono">★★★★ exclusive · ${p.have}/${p.total}</span></span></button>`; })()}</div>
     </div>
@@ -216,9 +220,9 @@ function levelSheet(id) {
       <div class="eyebrow">${esc(ch.title)} · secret level${res?.passed ? ` · cleared · ${res.grade}` : ''}</div>
       <h2 class="display display-m">${esc(lv.title)}</h2>
       <p class="muted small">${esc(lv.copy)}</p>
-      <div class="row"><span class="chip on">${icon('occasion')} ${formalWord(lv.formality)}</span>${lv.mood.map((m, i) => `<span class="chip ${i === 0 ? 'on' : ''}">${esc(m)}</span>`).join('')}<span class="chip cherry">${icon('crown')} twist</span></div>
-      <div class="secret-hero"><div class="set-fig">${st ? renderLook(look, { ...s.avatar, hairStyle: st.hairStyle || s.avatar.hairStyle }, { depth: true, shadow: false }) : ''}</div><div><div class="kicker">${icon('gift')} exclusive set</div><b>${esc(st?.name || '')}</b><p class="muted small">${sp.owned} of ${sp.total} pieces. Every clear drops the next one, in order. No luck involved.</p><div class="dots big">${(lv.drops || []).map((pid) => `<i class="${s.owned.includes(pid) ? 'on' : ''}"></i>`).join('')}</div></div></div>
-      <dl class="kv"><dt>Judged against</dt><dd>Another stylist at your level, at their strictest</dd><dt>Energy</dt><dd class="num">${icon('bolt')} ${cost} of ${e}</dd><dt>Credits</dt><dd class="num">${icon('coin')} ${lv.credits}</dd></dl>
+      <div class="row"><span class="chip on">${icon('occasion')} ${formalWord(lv.formality)}</span>${lv.mood.map((m, i) => `<span class="chip ${i === 0 ? 'on' : ''}">${esc(MOOD_LABEL(m))}</span>`).join('')}<span class="chip cherry">${icon('crown')} extra rule</span></div>
+      <div class="secret-hero"><div class="set-fig">${st ? renderLook(look, { ...s.avatar, hairStyle: st.hairStyle || s.avatar.hairStyle }, { depth: true, shadow: false }) : ''}</div><div><div class="kicker">${icon('gift')} exclusive set</div><b>${esc(st?.name || '')}</b><p class="muted small">${sp.owned} of ${sp.total} pieces. Each win gives you the next piece in order, so there’s no luck involved.</p><div class="dots big">${(lv.drops || []).map((pid) => `<i class="${s.owned.includes(pid) ? 'on' : ''}"></i>`).join('')}</div></div></div>
+      <dl class="kv"><dt>Judged against</dt><dd>The toughest stylist at your level, plus one extra rule</dd><dt>Energy</dt><dd class="num">${icon('bolt')} ${cost} of ${e}</dd><dt>Credits</dt><dd class="num">${icon('coin')} ${lv.credits}</dd></dl>
       <div class="sheet-actions">${sp.unlocked ? `<button class="btn primary block" data-play="${id}" data-play-mode="secret" ${e >= cost ? '' : 'disabled'}>${e >= cost ? `${icon('play')} Style it · ${cost} energy` : 'Not enough energy'}</button>` : `<div class="opt free">${icon('lock')}<span><b>Locked</b><small>S on every level in every mode first: ${perfectCount(ch).have} of ${perfectCount(ch).total}</small></span></div>`}${e < cost ? `<button class="btn ghost block" data-offer>${icon('bolt')} Get energy</button>` : ''}</div>
     </aside></div>`;
   }
@@ -234,9 +238,9 @@ function levelSheet(id) {
     <h2 class="display display-m">${esc(lv.title)}</h2>
     <div class="mono">${esc(lv.client)}</div>
     <p class="muted small">${esc(lv.copy)}</p>
-    <div class="row"><span class="chip on">${icon('occasion')} ${formalWord(lv.formality)}</span>${lv.mood.map((mo, i) => `<span class="chip ${i === 0 ? 'on' : ''}">${i === 0 ? icon('mood') + ' ' : ''}${esc(mo)}</span>`).join('')}<span class="chip">${icon('weather')} ${['', 'heatwave', 'warm', 'mild', 'cold', 'freezing'][lv.weather]}</span>${lv.required?.length ? `<span class="chip">needs ${lv.required.join(', ')}</span>` : ''}</div>
-    <div class="seg modes">${['easy', 'normal', 'hard'].map((mm) => { const r = resultOf(id, mm); const ok = modeUnlocked(id, mm); return `<button aria-selected="${m === mm}" data-sheet-mode="${mm}" ${ok ? '' : 'disabled'}>${MODES[mm].label}<small>${r?.grade ? `best ${r.grade}` : ok ? ({ easy: 'a gentle rival', normal: 'a fair rival', hard: 'a sharp rival' })[mm] : 'clear normal'}</small>${r?.grade === 'S' ? '<i class="sdot"></i>' : ''}</button>`; }).join('')}</div>
-    <dl class="kv"><dt>Judged against</dt><dd>Another stylist at your level${m === 'hard' ? ', plus a twist' : m === 'easy' ? '. Looser dress code, hints on' : ''}</dd><dt>Energy</dt><dd class="num">${cost ? `${icon('bolt')} ${cost} of ${e}` : 'Free'}</dd><dt>Credits</dt><dd class="num">${icon('coin')} ${Math.round(lv.credits * MODES[m].credit)}</dd><dt>Fabric</dt><dd>${esc(SWATCHES[lv.fabric] || lv.fabric)}${m === 'hard' ? ' · 40% chance of 2, +1 if you get an S' : levelCleared(id) ? ' · hard mode only now' : ' · 2 on first clear'}</dd></dl>
+    <div class="row"><span class="chip on">${icon('occasion')} ${formalWord(lv.formality)}</span>${lv.mood.map((mo, i) => `<span class="chip ${i === 0 ? 'on' : ''}">${i === 0 ? icon('mood') + ' ' : ''}${esc(MOOD_LABEL(mo))}</span>`).join('')}<span class="chip">${icon('weather')} ${['', 'heatwave', 'warm', 'mild', 'cold', 'freezing'][lv.weather]}</span>${lv.required?.length ? `<span class="chip">needs ${lv.required.map((x) => (SLOTS[x] || x).toLowerCase()).join(', ')}</span>` : ''}</div>
+    <div class="seg modes">${['easy', 'normal', 'hard'].map((mm) => { const r = resultOf(id, mm); const ok = modeUnlocked(id, mm); return `<button aria-selected="${m === mm}" data-sheet-mode="${mm}" ${ok ? '' : 'disabled'}>${MODES[mm].label}<small>${r?.grade ? `best ${r.grade}` : ok ? ({ easy: 'an easier rival', normal: 'a fair rival', hard: 'a tougher rival' })[mm] : 'clear normal'}</small>${r?.grade === 'S' ? '<i class="sdot"></i>' : ''}</button>`; }).join('')}</div>
+    <dl class="kv"><dt>Judged against</dt><dd>Another stylist at your level${m === 'hard' ? ', plus one extra rule' : m === 'easy' ? ', with a looser dress code and hints' : ''}</dd><dt>Energy</dt><dd class="num">${cost ? `${icon('bolt')} ${cost} of ${e}` : 'Free'}</dd><dt>Credits</dt><dd class="num">${icon('coin')} ${Math.round(lv.credits * MODES[m].credit)}</dd><dt>Fabric</dt><dd>${esc(SWATCHES[lv.fabric] || lv.fabric)}${m === 'hard' ? ' · 40% chance of 2, +1 if you get an S' : levelCleared(id) ? ' · hard mode only now' : ' · 2 on first clear'}</dd></dl>
     ${m === 'hard' ? (() => { const fr = fabricRuns(id); return `<div class="runs"><div class="runs-head"><b>Fabric runs today</b><span class="num">${fr.used} of ${fr.allowance} used${fr.resets ? ` · ${fr.resets} reset${fr.resets > 1 ? 's' : ''}` : ''}</span></div><div class="runs-dots">${Array.from({ length: fr.allowance }, (_, k) => `<i class="${k < fr.used ? 'used' : ''}"></i>`).join('')}</div>${fr.left ? '' : `<div class="row" style="margin-top:8px"><button class="btn small primary" data-reset-run="${id}" ${s.thread >= fr.resetPrice && fr.canReset ? '' : 'disabled'}>Reset · ${fr.resetPrice} ${icon('spool')}</button><button class="btn small" data-reset-ticket="${id}" ${fr.tickets > 0 && fr.canReset ? '' : 'disabled'}>Use a ticket · ${fr.tickets} left</button></div><p class="muted small" style="margin-top:6px">${fr.canReset ? `Up to ${fr.maxResets} resets a day. Free runs come back at midnight.` : 'No more resets today. Free runs come back at midnight.'}</p>`}</div>`; })() : ''}
     ${drop && !levelCleared(id) ? `<div class="reward-item" style="border:1px solid var(--hair);padding:10px;border-radius:var(--r2)"><div class="img">${thumb(drop, s.avatar)}</div><div><div class="mono">${icon('gift')} first clear drops (normal or hard)</div><div style="font-size:13px">${esc(drop.name)}</div><div class="mono">${esc(SET_BY_ID[drop.set]?.name || houseName(drop.house))}${s.owned.includes(drop.id) ? ' · owned' : ''}</div></div></div>` : ''}
     <div class="sheet-actions"><button class="btn primary block" data-play="${id}" data-play-mode="${m}" ${unlockedM && e >= cost && (m !== 'hard' || fabricRuns(id).left) ? '' : 'disabled'}>${!unlockedM ? 'Clear normal first' : m === 'hard' && !fabricRuns(id).left ? 'No runs left today' : e >= cost ? `${icon('play')} Style it on ${MODES[m].label.toLowerCase()}${cost ? ` · ${cost} energy` : ''}` : 'Not enough energy'}</button>${e < cost ? `<button class="btn ghost block" data-offer>${icon('bolt')} Get energy</button>` : ''}</div>
@@ -253,7 +257,9 @@ route('map', () => {
 export function startLevel(id, m = 'normal') {
   const s = state();
   const lv = LEVELS[id];
-  if (lv?.secret) m = 'secret';
+  if (!lv || !levelUnlocked(id)) { toast('That level is not open yet'); return; }
+  if (lv.secret) m = 'secret';
+  else if (!Object.hasOwn(MODES, m) || m === 'secret' || !modeUnlocked(id, m)) m = 'normal';
   const st = storyFor(id);
   const seen = (resultOf(id, 'normal')?.attempts || 0) + (resultOf(id, 'easy')?.attempts || 0) > 0;
   const go = () => { setLevel(id, m); navigate('#studio'); };
@@ -283,7 +289,7 @@ document.addEventListener('click', (e) => {
   const m = t.closest('[data-mode]'); if (m && !m.disabled) { mode = m.dataset.mode; rerender(); return; }
   const sm = t.closest('[data-sheet-mode]'); if (sm && !sm.disabled) { sheetMode = sm.dataset.sheetMode; const id = $('.sheet [data-play]')?.dataset.play || $('.sheet [data-reset-run]')?.dataset.resetRun; if (id) overlay(levelSheet(id)); return; }
   const nd = t.closest('g.node'); if (nd) { if (nd.classList.contains('locked') && !nd.classList.contains('secret')) { toast(mode === 'hard' ? 'Clear it on normal first' : 'Clear the previous level first'); return; } sheetMode = null; overlay(levelSheet(nd.dataset.level)); return; }
-  const ol = t.closest('[data-open-level]'); if (ol) { startLevel(ol.dataset.openLevel, mode); return; }
+  const ol = t.closest('[data-open-level]'); if (ol) { startLevel(ol.dataset.openLevel, openChapter ? mode : 'normal'); return; }
   const pl = t.closest('[data-play]'); if (pl) { closeOverlay(); startLevel(pl.dataset.play, pl.dataset.playMode || mode); return; }
   if (t.closest('[data-offer]')) { overlay(offerSheet('energy')); return; }
   const rr = t.closest('[data-reset-run]'); if (rr && !t.closest('[data-from-studio]')) { const r = resetFabricRun(rr.dataset.resetRun, false); toast(r.ok ? `Run reset for ${r.price} Thread` : r.reason === 'funds' ? 'Not enough Thread' : 'No more resets today'); overlay(levelSheet(rr.dataset.resetRun)); return; }
@@ -291,4 +297,4 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-start-tutorial]')) { markSeen('intro'); openNovel = 1; openChapter = 'c1'; startLevel('c1-1', 'normal'); return; }
   const st = t.closest('[data-set]'); if (st) { navigate('#wardrobe'); document.dispatchEvent(new CustomEvent('wardrobe:set', { detail: st.dataset.set })); return; }
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest && e.target.closest('g.node')) e.target.closest('g.node').dispatchEvent(new MouseEvent('click', { bubbles: true })); });
+document.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('g.node')) { e.preventDefault(); e.target.closest('g.node').dispatchEvent(new MouseEvent('click', { bubbles: true })); } });

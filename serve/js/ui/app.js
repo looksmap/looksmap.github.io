@@ -2,7 +2,7 @@
 import { tierOf, dimTier } from '../engine/score.js';
 import { track, captureSource, standalone, isIOS } from '../engine/track.js';
 import { handleReturn } from '../engine/payments.js';
-import { USD, state, subscribe, nextOpenLevel, DROPS, energy, ENERGY, energyEtaMin, CHAPTERS } from '../engine/state.js';
+import { USD, state, subscribe, nextOpenLevel, DROPS, energy, ENERGY, energyEtaMin, CHAPTERS, chapterCleared, storageOK } from '../engine/state.js';
 import { HOUSES } from '../data/catalog.js';
 import { injectSprite, icon } from './icons.js';
 import { OBJ } from './objects.js';
@@ -23,7 +23,7 @@ export const navigate = (hash) => { location.hash = hash; };
 
 export function currentRoute() {
   const h = (location.hash || '#map').slice(1).split('/')[0];
-  return routes[h] ? h : 'map';
+  return Object.hasOwn(routes, h) ? h : 'map';
 }
 // #play/<levelId>[/<mode>] opens a brief directly (shared links, creator challenges, the brief pages)
 let deferredInstall = null;
@@ -43,7 +43,8 @@ export function render() {
   const main = $('#main');
   $('#overlay').innerHTML = '';
   main.classList.toggle('fixed', fixedRoutes.has(name));
-  $('#view').innerHTML = routes[name]();
+  // a screen that fails to draw must not take the whole game down with it
+  try { $('#view').innerHTML = routes[name](); } catch (err) { console.error(err); $('#view').innerHTML = '<div class="banner-warn">This screen could not be shown. <a href="#map" style="text-decoration:underline">Go back to Chapters</a>.</div>'; }
   for (const a of $$('#nav a')) { if (a.dataset.route === name) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
   main.scrollTo({ top: 0 });
   document.dispatchEvent(new CustomEvent('view:rendered', { detail: { name } }));
@@ -53,7 +54,7 @@ export function rerender() { if (current) { const main = $('#main'); const y = m
 export function renderWallet() {
   const s = state();
   const e = energy();
-  $('#wallet').innerHTML = `<a class="mono num" href="#atelier" title="Energy: ${e}/${ENERGY.max}${e < ENERGY.max ? `, next in ${energyEtaMin()} min` : ''}">${OBJ.bolt(20)}<b>${e}</b></a><a class="mono num" href="#atelier" title="Credits: earned by styling">${OBJ.coin(20)}<b>${fmt(s.credits)}</b></a><a class="mono num" href="#atelier" title="Thread: the paid currency">${OBJ.spool(20)}<b>${fmt(s.thread)}</b></a>`;
+  $('#wallet').innerHTML = `<a class="mono num" href="#atelier" aria-label="Energy ${e} of ${ENERGY.max}" title="Energy: ${e}/${ENERGY.max}${e < ENERGY.max ? `, next in ${energyEtaMin()} min` : ''}">${OBJ.bolt(20)}<b>${e}</b></a><a class="mono num" href="#atelier" aria-label="${fmt(s.credits)} credits" title="Credits: earned by styling">${OBJ.coin(20)}<b>${fmt(s.credits)}</b></a><a class="mono num" href="#atelier" aria-label="${fmt(s.thread)} Thread" title="Thread: the paid currency">${OBJ.spool(20)}<b>${fmt(s.thread)}</b></a>`;
 }
 export function renderTicker() {
   const s = state();
@@ -65,7 +66,7 @@ export function renderTicker() {
     `<b>Form</b> ${tierOf(s.skill, 68)} · <b>streak</b> ${s.streak}`,
     '<b>House rule</b> make it make sense',
   ];
-  const gated = !next && CHAPTERS.find((c) => !c.levels.every((_, i) => s.results[`${c.id}-${i + 1}`]?.passed));
+  const gated = !next && CHAPTERS.find((c) => !chapterCleared(c));
   const el = $('#barmid'); if (el) el.innerHTML = next ? `<span class="mono muted">${esc(ch.title)} · ${next.index}/${ch.levels.length}</span>` : gated ? `<span class="mono muted">Lv ${gated.minLevel} opens ${esc(gated.title)}</span>` : '<span class="mono muted">Every chapter cleared</span>';
 }
 export function timeLeft(ms) {
@@ -113,11 +114,12 @@ export function init() {
   track('open', { standalone: standalone(), route: currentRoute() });
   subscribe(() => { renderWallet(); });
   renderWallet(); renderTicker(); render();
+  if (!storageOK) { const b = document.createElement('div'); b.className = 'banner-warn'; b.textContent = 'This browser is blocking storage (private mode?), so your progress will not be saved. Purchases are turned off.'; $('#device').insertBefore(b, $('#main')); }
   handleReturn().then((r) => {
     if (!r) return;
     renderWallet(); renderTicker(); rerender();
     if (r.cancelled) { toast('Checkout cancelled. Nothing was charged.'); return; }
-    overlay(`<div class="sheet-wrap" role="dialog" aria-label="Purchase"><div class="scrim" data-close-sheet></div><aside class="sheet confirm"><button class="close" data-close-sheet>Close ×</button><div class="eyebrow">${r.ok ? 'Thank you' : 'Purchase'}</div><h2 class="display display-m">${r.ok ? (r.repeat ? 'Already added' : 'Added to your wallet') : 'Not added'}</h2><p>${esc(r.text || '')}</p>${r.ok && !r.repeat && r.usd ? `<p class="muted small">${USD(r.usd)}${r.verified ? ' · confirmed by Stripe' : ''}. Your receipt is in your email.</p>` : ''}<div class="sheet-actions"><button class="btn primary block" data-close-sheet>Done</button></div></aside></div>`);
+    overlay(`<div class="sheet-wrap" role="dialog" aria-label="Purchase"><div class="scrim" data-close-sheet></div><aside class="sheet confirm"><button class="close" data-close-sheet>Close ×</button><div class="eyebrow">${r.ok ? 'Thank you' : 'Purchase'}</div><h2 class="display display-m">${r.ok ? (r.repeat ? 'Already added' : 'Added to your wallet') : r.pending ? 'Not confirmed yet' : 'Not added'}</h2><p>${esc(r.text || '')}</p>${r.ok && !r.repeat && r.usd ? `<p class="muted small">${USD(r.usd)}${r.verified ? ' · confirmed by Stripe' : ''}. Your receipt is in your email.</p>` : ''}<div class="sheet-actions"><button class="btn primary block" data-close-sheet>Done</button></div></aside></div>`);
   }).catch(() => {});
   setInterval(() => { renderTicker(); renderWallet(); }, 60000);
 }

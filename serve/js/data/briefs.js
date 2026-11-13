@@ -59,9 +59,9 @@ export function dailyBrief(date = new Date()) {
 // Twists: added when a player is comfortably above the pass mark. Always shown, never hidden.
 export const TWISTS = [
   { id: 'noblack', text: 'No black anywhere', forbid: { colors: [C.ink, C.black] } },
-  { id: 'mono', text: 'One hue family only', mood: ['minimal'] },
+  { id: 'mono', text: 'Shades of one colour only', mood: ['minimal'] },
   { id: 'flats', text: 'Flats only', test: (look) => !look.shoes || look.shoes.heel === 0 },
-  { id: 'nodress', text: 'Separates, no dress', forbid: { slots: ['dress'] } },
+  { id: 'nodress', text: 'A top and a bottom, no dress', forbid: { slots: ['dress'] } },
   { id: 'print', text: 'Exactly one print', test: (look) => Object.values(look).filter((i) => i && i.print).length === 1 },
   { id: 'threeacc', text: 'Exactly three accessories', test: (look) => ['head', 'eyes', 'ears', 'neck', 'belt', 'gloves', 'scarf', 'bag'].filter((s) => look[s]).length === 3 },
 ];

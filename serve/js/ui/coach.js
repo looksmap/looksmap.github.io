@@ -15,9 +15,10 @@ export function startCoach(list, done) {
   steps = list; i = 0; onDone = done;
   el = document.createElement('div');
   el.className = 'coach';
-  el.innerHTML = `<div class="coach-hole"></div><div class="coach-tip" role="status"><div class="coach-who">${pimSVG()}</div><div class="coach-body"><p class="coach-text"></p><div class="coach-foot"><span class="coach-step"></span><button class="coach-next" type="button">Next</button></div></div></div>`;
+  el.innerHTML = `<div class="coach-hole"></div><div class="coach-tip" role="status"><div class="coach-who">${pimSVG()}</div><div class="coach-body"><p class="coach-text"></p><div class="coach-foot"><span class="coach-step"></span><span><button class="coach-skip" type="button">Skip tips</button> <button class="coach-next" type="button">Next</button></span></div></div></div>`;
   $('#device').appendChild(el);
   el.querySelector('.coach-next').addEventListener('click', (e) => { e.stopPropagation(); advance(); });
+  el.querySelector('.coach-skip').addEventListener('click', (e) => { e.stopPropagation(); finish(); });
   show();
   timer = setInterval(tick, 220);
 }
@@ -32,6 +33,9 @@ function show() {
   btn.textContent = st.cta || (i === steps.length - 1 ? 'Done' : 'Next');
   btn.style.display = st.when && !st.next ? 'none' : '';
   el.querySelector('.coach-tip').classList.toggle('waiting', !!st.when && !st.next);
+  // a target further along a scrolling row (the Shoes tab) is brought into view first
+  const tgt = st.target && $(st.target);
+  if (tgt && tgt.scrollIntoView) tgt.scrollIntoView({ inline: 'center', block: 'nearest' });
   position();
 }
 function position() {

@@ -1,7 +1,7 @@
 // The shop. Thread is the paid currency; everything has a printed price and nothing is a surprise.
 // Prototype rule: tapping Buy on a dollar item adds the goods and records the price. No payment is taken.
 import { route, esc, fmt, houseName, toast, overlay, closeOverlay, rerender, timeLeft, renderTicker, renderWallet } from './app.js';
-import { SETS, REFILL_LADDER, setProgress, hydrate, state, buy, owns, item, threadPrice, DROPS, buyDropSet, CAPSULE, pullCapsule, energy, ENERGY, maxEnergy, SET_BY_ID, SWATCHES, CHAPTERS, nextOpenLevel,
+import { SETS, REFILL_LADDER, setProgress, hydrate, state, buy, owns, item, threadPrice, DROPS, buyDropSet, dropSetPrice, storageOK, CAPSULE, pullCapsule, energy, ENERGY, maxEnergy, SET_BY_ID, SWATCHES, CHAPTERS, nextOpenLevel,
   THREAD_TIERS, DAILY_BUNDLE, MONTHLY, FABRIC_PACK, CREDIT_PACKS, GIFT_WINDOWS, SIGNIN, USD, buyThread, buyDailyBundle, dailyBundleBought, buyMonthly, monthlyActive, monthlyDaysLeft, monthlyClaimable, claimMonthly,
   refillPrice, refillsBoughtToday, refillEnergy, fabricPacksLeft, buyFabric, buyCredits, giftState, claimGift, signinState, signIn, spentUSD, energyEtaMin, fabricRuns, resetFabricRun, FABRIC_RUNS, LEVELS } from '../engine/state.js';
 import { CATALOG, SLOTS } from '../data/catalog.js';
@@ -166,13 +166,13 @@ function editGrid(s) {
 function drops(s) {
   return DROPS.map((d) => {
     const missing = d.items.filter((id) => !owns(id));
-    const setPrice = Math.max(30, Math.round(d.setThread * (missing.length / d.items.length) / 10) * 10);
+    const setPrice = dropSetPrice(d.id);
     const st = SET_BY_ID[d.id];
     const look = Object.fromEntries(d.items.map(item).map((it) => [it.slot, it]));
     return `<section class="drop">
       <div class="drop-hero"><div class="set-fig">${renderLook(look, { ...s.avatar, hairStyle: st?.hairStyle || s.avatar.hairStyle }, { depth: true, shadow: false })}</div>
-      <div><div class="eyebrow">${esc(houseName(d.house))} · limited set</div><h2>${esc(d.title)}</h2><p class="line">${esc(d.line)}</p>
-        <div class="timer"><span>Ends in <b>${timeLeft(d.endsIn)}</b></span><span>Back in <b>${esc(d.returns)}</b>, same price</span><span>Whole set <b>${d.setThread} Thread</b></span></div>
+      <div><div class="eyebrow">${esc(houseName(d.house))} · featured set</div><h2>${esc(d.title)}</h2><p class="line">${esc(d.line)}</p>
+        <div class="timer"><span>Whole set <b>${d.setThread} Thread</b></span><span>Always available at this price</span></div>
         ${missing.length ? `<button class="btn primary" data-buy-set="${d.id}" ${s.thread >= setPrice ? '' : 'disabled'}>Buy the ${missing.length < d.items.length ? 'rest of the ' : ''}set · ${setPrice} ${icon('spool')}</button>` : '<span class="chip good">Set complete</span>'}</div></div>
       <div class="items">${d.items.map((id) => { const it = item(id); const o = owns(id); const p = threadPrice(it); return `<div class="tile ${o ? 'on' : ''}"><button data-shop-item="${id}" style="text-align:left"><div class="img">${thumb(it, s.avatar)}</div><div class="cap"><span class="name">${esc(it.name)}</span><span class="price num">${o ? 'Owned' : `${p} Thread`}</span></div></button>${o ? '<span class="mark">Owned</span>' : `<button class="btn small ${s.thread >= p ? '' : 'ghost'}" style="margin:0 6px 8px" data-buy-thread="${id}" ${s.thread >= p ? '' : 'disabled'}>${p} ${icon('spool')}</button>`}</div>`; }).join('')}</div>
     </section>`;
@@ -264,6 +264,7 @@ function execute(key) {
   let r;
   track('purchase_attempt', { kind });
   if (['daily', 'monthly', 'thread'].includes(kind) && paymentsMode(skuFor(key)) !== 'prototype') {
+    if (!storageOK) { toast('This browser is not saving progress, so purchases are turned off here.', 4200); closeOverlay(); return; }
     const btn = document.querySelector(`[data-confirm="${key}"]`); if (btn) { btn.disabled = true; btn.textContent = 'Opening Stripe…'; }
     startCheckout(skuFor(key)).catch(() => { toast('Could not open checkout. Try again in a moment.'); closeOverlay(); });
     return;

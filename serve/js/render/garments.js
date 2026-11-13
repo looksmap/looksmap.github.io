@@ -65,8 +65,8 @@ function necklineSegment(neck, ease) {
     case 'square': return { start: [L - 4, 154, 'c'], close: [[R + 4, 154, 'c'], [R + 4, 190, 'c'], [L - 4, 190, 'c']] };
     case 'boat': return { start: [CX - 40, 162], close: [[CX + 40, 162], [CX, 170]] };
     case 'sweetheart': return { start: [L - 8, 160], close: [[R + 8, 160], [R - 2, 182], [CX, 174, 'c'], [L + 2, 182]] };
-    case 'turtle': return { start: [CX - 15, 118, 'c'], close: [[CX + 15, 118, 'c'], [CX, 124]] };
-    case 'mock': return { start: [CX - 14, 134, 'c'], close: [[CX + 14, 134, 'c'], [CX, 139]] };
+    case 'turtle': return { start: [CX - 14.5, 122, 'c'], after: [[CX - 16, 150]], close: [[CX + 14.5, 122, 'c'], [CX, 126]] };
+    case 'mock': return { start: [CX - 14.5, 134, 'c'], after: [[CX - 16, 151]], close: [[CX + 14.5, 134, 'c'], [CX, 138]] };
     case 'crew':
     default: return { start: [L, top], close: [[R, top], [CX, 165]] };
   }
@@ -101,6 +101,7 @@ export function bodice(p = {}) {
   } else {
     const ns = necklineSegment(neck, ease);
     pts.push(ns.start);
+    if (ns.after) pts.push(...ns.after);
     neckClose = ns.close;
     pts.push([CX - 44, 161 + ease * 0.08]);
     pts.push([torsoX(-1, 168) + ease * 0.25, 169 + ease * 0.18]);
