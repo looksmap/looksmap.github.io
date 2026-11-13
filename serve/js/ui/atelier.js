@@ -1,11 +1,11 @@
 // The shop. Thread is the paid currency; everything has a printed price and nothing is a surprise.
 // Prototype rule: tapping Buy on a dollar item adds the goods and records the price. No payment is taken.
 import { route, esc, fmt, houseName, toast, overlay, closeOverlay, rerender, timeLeft, renderTicker, renderWallet } from './app.js';
-import { SETS, REFILL_LADDER, setProgress, hydrate, state, buy, owns, item, threadPrice, DROPS, buyDropSet, dropSetPrice, storageOK, CAPSULE, pullCapsule, energy, ENERGY, maxEnergy, SET_BY_ID, SWATCHES, CHAPTERS, nextOpenLevel,
+import { SETS, REFILL_LADDER, setProgress, hydrate, state, buy, owns, item, threadPrice, DROPS, buyDropSet, dropSetPrice, storageOK, CAPSULE, pullCapsule, BOXES, boxPool, freePullReady, BOOST_SHOP, boostState, buyBoost, energy, ENERGY, maxEnergy, SET_BY_ID, SWATCHES, CHAPTERS, nextOpenLevel,
   THREAD_TIERS, DAILY_BUNDLE, MONTHLY, FABRIC_PACK, CREDIT_PACKS, GIFT_WINDOWS, SIGNIN, USD, buyThread, buyDailyBundle, dailyBundleBought, buyMonthly, monthlyActive, monthlyDaysLeft, monthlyClaimable, claimMonthly,
   refillPrice, refillsBoughtToday, refillEnergy, fabricPacksLeft, buyFabric, buyCredits, giftState, claimGift, signinState, signIn, spentUSD, energyEtaMin, fabricRuns, resetFabricRun, FABRIC_RUNS, LEVELS } from '../engine/state.js';
 import { CATALOG, SLOTS } from '../data/catalog.js';
-import { lazyThumb } from './thumbs.js';
+import { lazyThumb, thumb } from './thumbs.js';
 import { itemDrawer, STARS } from './wardrobe.js';
 import { renderLook } from '../render/figure.js';
 import { icon } from './icons.js';
@@ -13,7 +13,7 @@ import { OBJ } from './objects.js';
 import { track } from '../engine/track.js';
 import { paymentsMode, paymentsEnv, startCheckout, skuFor, purchaseHistory } from '../engine/payments.js';
 
-let tab = 'today';
+let tab = 'capsule';
 let lastPull = null;
 let editSlot = 'all';
 let editPage = 0;
@@ -178,22 +178,70 @@ function drops(s) {
     </section>`;
   }).join('');
 }
+// A gift box, drawn in the box's own colours.
+const BOX_ART = { pink: ['#FFC2DE', '#FF5FA8', '#C2187A', '#FFF'], gold: ['#FFE9A8', '#F2B632', '#B57A00', '#FFF7D6'], crystal: ['#E4DBFF', '#9C8CFF', '#5A3FD0', '#DFFBFF'] };
+function boxSVG(id, size = 120) {
+  const [a, b, c, r] = BOX_ART[id] || BOX_ART.pink;
+  return `<svg class="box-svg" viewBox="0 0 120 120" width="${size}" height="${size}" aria-hidden="true">
+    <defs><linearGradient id="bx-${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${a}"/><stop offset=".55" stop-color="${b}"/><stop offset="1" stop-color="${c}"/></linearGradient>
+      <linearGradient id="bl-${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>
+    <ellipse cx="60" cy="108" rx="40" ry="6" fill="${c}" opacity=".22"/>
+    <g class="box-body"><rect x="20" y="52" width="80" height="54" rx="8" fill="url(#bx-${id})"/><rect x="52" y="52" width="16" height="54" fill="${r}" opacity=".85"/><rect x="20" y="52" width="80" height="10" fill="${c}" opacity=".18"/></g>
+    <g class="box-lid"><rect x="14" y="36" width="92" height="22" rx="7" fill="url(#bl-${id})"/><rect x="52" y="36" width="16" height="22" fill="${r}" opacity=".9"/>
+      <path d="M60,36 C44,10 22,18 32,34 C38,42 52,40 60,36 C68,40 82,42 88,34 C98,18 76,10 60,36Z" fill="${r}" stroke="${c}" stroke-opacity=".35" stroke-width="1.5"/><circle cx="60" cy="36" r="5.500" fill="${b}"/></g>
+    <path d="M30,62 h10 M30,70 h6" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".7"/>
+    <path class="box-spark" d="M98,20 q2,8 10,10 q-8,2 -10,10 q-2,-8 -10,-10 q8,-2 10,-10Z" fill="#fff"/>
+  </svg>`;
+}
+const RARITY_NAME = { core: 'Core', edit: 'Edit', archive: 'Archive', icon: 'Icon' };
 function capsule(s) {
-  const pool = CAPSULE.pool();
-  const left = pool.filter((i) => !owns(i.id));
-  const pityIn = CAPSULE.pity - s.capsule.sincePity;
-  const byR = (r) => ({ total: pool.filter((i) => i.rarity === r).length, left: left.filter((i) => i.rarity === r).length });
-  return `<div class="section" style="display:grid;gap:16px">
-    <div>
-      <div class="eyebrow">The capsule · blind box, printed odds</div>
-      <h2 class="display display-l" style="margin:6px 0 10px">One pull, <em class="ital">one piece.</em></h2>
-      <p class="muted small">No duplicates, so the pool shrinks with every pull. An Icon piece is guaranteed by pull ${CAPSULE.pity}. These are the real odds, the same for everyone.</p>
-      <div class="odds" style="margin-top:12px"><span class="h">Rarity</span><span class="h">Odds</span><span class="h">Left in pool</span>${CAPSULE.odds.map(([r, p]) => { const c = byR(r); return `<span>${esc(r)}</span><span class="num">${(p * 100).toFixed(0)}%</span><span class="num">${fmt(c.left)} / ${fmt(c.total)}</span>`; }).join('')}</div>
-      <dl class="kv" style="margin-top:12px"><dt>Pulls so far</dt><dd class="num">${s.capsule.pulls}</dd><dt>Icon guaranteed in</dt><dd class="num">${pityIn}</dd><dt>Price</dt><dd>${CAPSULE.price} Thread</dd></dl>
-      <div style="margin-top:12px"><button class="btn primary block" data-pull ${s.thread >= CAPSULE.price && left.length ? '' : 'disabled'}>Pull · ${CAPSULE.price} ${icon('spool')}</button></div>
-    </div>
-    <div class="reveal">${lastPull ? `${renderLook({ [lastPull.slot]: lastPull }, s.avatar, { ghost: true, depth: true, shadow: false })}<div class="label"><span class="name">${esc(lastPull.name)}</span><span class="house">${esc(houseName(lastPull.house))} · ${esc(lastPull.rarity)}</span></div>` : '<span class="mono">Your pull appears here</span>'}</div>
-  </div>`;
+  const free = freePullReady();
+  const pityIn = Math.max(0, CAPSULE.pity - s.capsule.sincePity);
+  const card = (box) => {
+    const pool = boxPool(box.id), left = pool.filter((i) => !owns(i.id)).length;
+    const isFree = !!box.freeDaily && free, can = left > 0 && (isFree || s.thread >= box.price);
+    return `<article class="box-card ${box.id} ${isFree ? 'free' : ''}">
+      ${isFree ? '<span class="box-flag">Free today</span>' : ''}
+      <div class="box-art">${boxSVG(box.id)}</div>
+      <h3>${esc(box.name)}</h3>
+      <div class="box-odds" aria-label="Odds">${box.odds.map(([r, p]) => `<span class="rar ${r}"><b>${STARS[r]}</b> ${Math.round(p * 100)}%</span>`).join('')}</div>
+      <button class="btn primary block" data-pull="${box.id}" ${can ? '' : 'disabled'}>${!left ? 'All collected' : isFree ? 'Open for free' : `Open · ${box.price} ${icon('spool')}`}</button>
+      <small>${fmt(left)} of ${fmt(pool.length)} pieces left${box.freeDaily && !free ? ' · next free box tomorrow' : ''}</small>
+    </article>`;
+  };
+  return `<section class="boxes">
+    <div class="boxes-head"><div class="kicker">${icon('gift')} Blind boxes</div><h2 class="display display-l">What’s inside?</h2>
+      <p class="muted">Every box holds one piece you don’t own yet. The Pink Box is free once a day, and the others are opened with Thread.</p></div>
+    <div class="box-grid">${Object.values(BOXES).map(card).join('')}</div>
+    <div class="box-pity"><span>${icon('star')} An Icon piece is guaranteed within <b>${pityIn}</b> more ${pityIn === 1 ? 'box' : 'boxes'}</span><span class="rank-bar"><i style="width:${Math.round((100 * s.capsule.sincePity) / CAPSULE.pity)}%"></i></span></div>
+    <details class="box-info"><summary>The odds, in full</summary>
+      <p class="muted small">These are the real chances, the same for every player. A box never repeats a piece you own, so each pool gets smaller as you open boxes. You have opened ${s.capsule.pulls} so far.</p>
+      ${Object.values(BOXES).map((box) => { const pool = boxPool(box.id); return `<div class="odds"><span class="h">${esc(box.name)}</span><span class="h">Chance</span><span class="h">Left</span>${box.odds.map(([r, p]) => `<span>${STARS[r]} ${RARITY_NAME[r]}</span><span class="num">${Math.round(p * 100)}%</span><span class="num">${fmt(pool.filter((i) => i.rarity === r && !owns(i.id)).length)} / ${fmt(pool.filter((i) => i.rarity === r).length)}</span>`).join('')}</div>`; }).join('')}
+    </details>
+  </section>`;
+}
+// The opening: the box shakes, the lid lifts, and the piece is shown with its rarity.
+function prizeSheet(r) {
+  const s = state(), it = r.item, box = BOXES[r.box];
+  const again = boxPool(box.id).some((i) => !owns(i.id)) && s.thread >= box.price;
+  return `<div class="sheet-wrap" role="dialog" aria-label="Your box"><div class="scrim" data-close-sheet></div><aside class="sheet prize rar-${it.rarity}">
+    <div class="prize-stage"><div class="prize-box ${box.id}">${boxSVG(box.id, 150)}</div>
+      <div class="prize-item"><div class="prize-glow"></div><div class="prize-fig">${thumb(it, s.avatar)}</div></div></div>
+    <div class="prize-text"><span class="prize-rar">${STARS[it.rarity]} ${RARITY_NAME[it.rarity]}</span><h2 class="display display-m">${esc(it.name)}</h2><p class="muted small">${esc(houseName(it.house))} · added to your wardrobe${r.free ? ' · today’s free box' : ''}</p></div>
+    <div class="sheet-actions">${again ? `<button class="btn primary block" data-pull="${box.id}">Open another · ${box.price} ${icon('spool')}</button>` : ''}<button class="btn block" data-close-sheet>Done</button></div>
+  </aside></div>`;
+}
+function boostsView(s) {
+  const mmss = (ms) => { const t = Math.ceil(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+  return `<section class="boost-shop">
+    <div class="boxes-head"><div class="kicker">${icon('bolt')} Boosts</div><h2 class="display display-l">Power up your judging</h2>
+      <p class="muted">Tap a boost while your outfit is being judged to add points to the lines that follow. You buy each boost once with credits. After you use one, it needs a few minutes to recharge.</p></div>
+    ${Object.values(BOOST_SHOP).map((b) => { const st = boostState(b.id); return `<article class="boost-card ${b.id} ${st.owned ? 'owned' : ''}">
+      <div class="boost-ic">${icon(b.id === 'catwalk' ? 'sparkle' : 'star')}</div>
+      <div><h3>${esc(b.name)}</h3><p>${esc(b.hint)}</p><small>${st.owned ? (st.ready ? 'Ready to use' : `Recharging · ready in ${mmss(st.leftMs)}`) : `Recharges in ${b.cooldownMin} minutes after each use`}</small></div>
+      ${st.owned ? `<span class="chip good">Owned</span>` : `<button class="btn small primary" data-buy-boost="${b.id}" ${s.credits >= b.price ? '' : 'disabled'}>${fmt(b.price)} ${icon('coin')}</button>`}
+    </article>`; }).join('')}
+  </section>`;
 }
 
 /* ---------- confirm sheet and the out-of-energy offer ---------- */
@@ -280,8 +328,8 @@ function execute(key) {
 route('atelier', () => {
   const s = state();
   return `<div class="page-head"><h1>Shop</h1></div>
-  <div class="filters" style="border-bottom:0">${[['today', 'Today'], ['energy', 'Energy & fabric'], ['thread', 'Thread'], ['edit', 'The Edit'], ['drops', 'Sets'], ['capsule', 'Capsule']].map(([k, l]) => `<button class="chip ${tab === k ? 'fill' : ''}" data-atab="${k}">${l}</button>`).join('')}</div>
-  ${tab === 'today' ? todayView(s) : tab === 'thread' ? threadView(s) : tab === 'energy' ? energyView(s) : tab === 'edit' ? editGrid(s) : tab === 'drops' ? drops(s) : capsule(s)}`;
+  <div class="filters" style="border-bottom:0">${[['capsule', 'Blind boxes'], ['boosts', 'Boosts'], ['today', 'Today'], ['energy', 'Energy & fabric'], ['thread', 'Thread'], ['edit', 'The Edit'], ['drops', 'Sets']].map(([k, l]) => `<button class="chip ${tab === k ? 'fill' : ''}" data-atab="${k}">${l}${k === 'capsule' && freePullReady() ? '<i class="chip-dot"></i>' : ''}</button>`).join('')}</div>
+  ${tab === 'today' ? todayView(s) : tab === 'thread' ? threadView(s) : tab === 'energy' ? energyView(s) : tab === 'edit' ? editGrid(s) : tab === 'drops' ? drops(s) : tab === 'boosts' ? boostsView(s) : capsule(s)}`;
 });
 
 document.addEventListener('click', (e) => {
@@ -299,6 +347,18 @@ document.addEventListener('click', (e) => {
   const b = t.closest('[data-buy]'); if (b) { const r = buy(b.dataset.buy, 'credits'); toast(r.ok ? `Bought ${item(b.dataset.buy).name} for CR ${r.price}` : r.reason === 'funds' ? 'Not enough credits' : 'Already owned'); if (t.closest('[data-close-drawer]')) closeOverlay(); rerender(); return; }
   const bt = t.closest('[data-buy-thread]'); if (bt) { const r = buy(bt.dataset.buyThread, 'thread'); toast(r.ok ? `Bought ${item(bt.dataset.buyThread).name} for ${r.price} Thread` : r.reason === 'funds' ? 'Not enough Thread' : 'Already owned'); if (t.closest('[data-close-drawer]')) closeOverlay(); rerender(); renderTicker(); return; }
   const bs = t.closest('[data-buy-set]'); if (bs) { const r = buyDropSet(bs.dataset.buySet); toast(r.ok ? `Set bought for ${r.price} Thread` : r.reason === 'funds' ? `Needs ${r.price} Thread` : 'Already complete'); rerender(); return; }
-  if (t.closest('[data-pull]')) { const r = pullCapsule(); if (r.ok) { lastPull = r.item; toast(`${r.item.name} · ${r.item.rarity}`); } else toast(r.reason === 'funds' ? 'Not enough Thread' : 'Pool complete'); rerender(); return; }
+  const pl = t.closest('[data-pull]');
+  if (pl && !pl.disabled) {
+    const r = pullCapsule(pl.dataset.pull);
+    if (r.ok) { lastPull = r.item; track('box_open', { box: r.box, rarity: r.item.rarity, free: r.free }); renderWallet(); rerender(); markShopDot(); overlay(prizeSheet(r)); }
+    else toast(r.reason === 'funds' ? 'Not enough Thread' : 'You have collected everything in this box');
+    return;
+  }
+  const bb = t.closest('[data-buy-boost]');
+  if (bb && !bb.disabled) { const r = buyBoost(bb.dataset.buyBoost); toast(r.ok ? `${BOOST_SHOP[bb.dataset.buyBoost].name} is yours. Use it during judging!` : r.reason === 'funds' ? 'Not enough credits' : 'You already own it'); renderWallet(); rerender(); return; }
   const si = t.closest('[data-shop-item]'); if (si) { const it = item(si.dataset.shopItem); const buyHtml = it.source === 'atelier' ? `<button class="btn primary block" data-buy="${it.id}" data-close-drawer>Buy · CR ${fmt(it.price)}</button>` : `<button class="btn primary block" data-buy-thread="${it.id}" data-close-drawer>Buy · ${threadPrice(it)} Thread</button>`; overlay(itemDrawer(it, { buyHtml })); return; }
 });
+
+// a dot on the Shop tab while today's free box is waiting
+function markShopDot() { const a = document.querySelector('#nav a[data-route="atelier"]'); if (a) a.classList.toggle('dot', freePullReady()); }
+document.addEventListener('view:rendered', markShopDot);

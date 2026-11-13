@@ -18,7 +18,9 @@ import { playJudging } from './judging.js';
 import { gradeByMargin } from '../engine/bots.js';
 import { markSeen } from '../engine/state.js';
 import { shareVerdict, briefLink, copyLink, battleLink } from './share.js';
-import { canSubmit, previewSubmit, judgeAgainst, opponentFromLook, battleBrief, levelBoard, finishRanked, RANKED, rankOf, ranked } from '../engine/state.js';
+import { backdropSVG } from './backdrops.js';
+import { boostState, useBoost } from '../engine/state.js';
+import { beginSubmit, pendingToken, judgeAgainst, opponentFromLook, battleBrief, levelBoard, finishRanked, beginRanked, forfeitRanked, rankedLive, RANKED, rankOf, ranked } from '../engine/state.js';
 import { track } from '../engine/track.js';
 import { installState, promptInstall } from './app.js';
 
@@ -34,15 +36,26 @@ let railFilter = '';
 // A friend battle or a ranked match: { kind: 'battle' | 'ranked', brief, opp, deadline? }. It replaces the story brief
 // in the studio until the player leaves; nothing in it touches story progress.
 let special = null;
-export function setSpecial(ctx) { special = ctx; if (ctx) { levelId = ctx.brief.id; mode = 'normal'; look = defaultLook(); tab = 'top'; } }
+// Leaving a battle or a ranked match. A ranked match that is left before an outfit is sent counts as a loss.
+function dropSpecial() {
+  const sp = special;
+  if (!sp) return false;
+  special = null; stopClock();
+  if (sp.kind === 'ranked' && !sp.done && !judgingNow && rankedLive()) { const f = forfeitRanked(); if (f.ok) toast(`You left the ranked match, so it counted as a loss (${f.delta} rank points).`, 4600); }
+  return true;
+}
+export function setSpecial(ctx) { dropSpecial(); special = ctx; if (ctx) { levelId = ctx.brief.id; mode = 'normal'; look = defaultLook(); tab = 'top'; } }
 export const specialNow = () => special;
 const isPim = () => (special ? false : !!LEVELS[levelId]?.pim);
 export function setLevel(id, m = 'normal') {
+  dropSpecial();
   if (LEVELS[id]?.secret) m = 'secret';
   levelId = id; mode = m;
   try { sessionStorage.setItem('serve.level', JSON.stringify({ id, m })); } catch (e) { /* ignore */ }
   const prev = state().history.find((h) => h.briefId === id);
   look = prev ? hydrateOwned(prev.items) : defaultLook();
+  // the hairstyle is the avatar's current one, not whatever she wore the last time this level was played
+  if (!isPim()) { const hair = item(hairIdForStyle(state().avatar.hairStyle)); if (hair) look.hair = hair; }
   tab = isPim() ? 'dress' : 'top';
 }
 export function setLook(items) { look = hydrateOwned(items); }
@@ -90,7 +103,7 @@ function stage(b) {
   const w = worn();
   // live hints: on easy mode, and after two misses on the same level, the stage shows the most useful next change
   const tip = b.assist && w.length ? evaluate(look, b).critique.find((n) => n) : '';
-  return `${tip ? `<div class="hint-live"><b>${icon('sparkle')} Hint</b><span>${esc(tip)}</span></div>` : `<span class="corner tl">Look ${String(s.history.length + 1).padStart(3, '0')}${zoom ? ' · close-up' : ''}</span>`}
+  return `${isPim() ? '' : backdropSVG(s.avatar.backdrop, 'stage-bg')}${tip ? `<div class="hint-live"><b>${icon('sparkle')} Hint</b><span>${esc(tip)}</span></div>` : `<span class="corner tl">Look ${String(s.history.length + 1).padStart(3, '0')}${zoom ? ' · close-up' : ''}</span>`}
     ${figure(look, s.avatar, { toile: true, depth: true, viewBox: zoom ? '50 0 260 400' : undefined, shadow: !zoom })}
     <span class="corner bl">${w.length ? esc(w.map((i) => i.name).join(' · ')) : 'Choose a category below to start dressing'}</span>`;
 }
@@ -104,9 +117,10 @@ function drawer() {
   let body;
   if (tab === 'model') {
     body = `<div class="model-panel">
-      <div class="swatches">${Object.entries(SKIN).map(([k, v]) => `<button class="swatch ${s.avatar.skin === k ? 'on' : ''}" style="background:${v}" data-skin="${k}" title="skin ${k}"></button>`).join('')}</div>
-      <div class="swatches">${Object.entries(HAIR_COLORS).map(([k, v]) => `<button class="swatch ${s.avatar.hairColor === k ? 'on' : ''}" style="background:${v}" data-haircolor="${k}" title="hair ${k}"></button>`).join('')}</div>
-      <div class="swatches">${Object.entries(EYES).map(([k, v]) => `<button class="swatch ${s.avatar.eyes === k ? 'on' : ''}" style="background:${v};border-radius:50%" data-eyes="${k}" title="eyes ${k}"></button>`).join('')}</div>
+      <div class="model-row"><span class="model-label">Skin tone</span><div class="swatches">${Object.entries(SKIN).map(([k, v]) => `<button class="swatch ${s.avatar.skin === k ? 'on' : ''}" style="background:${v}" data-skin="${k}" title="skin ${k}" aria-label="Skin tone ${k}"></button>`).join('')}</div></div>
+      <div class="model-row"><span class="model-label">Hair colour</span><div class="swatches">${Object.entries(HAIR_COLORS).map(([k, v]) => `<button class="swatch ${s.avatar.hairColor === k ? 'on' : ''}" style="background:${v}" data-haircolor="${k}" title="hair ${k}" aria-label="Hair colour ${k}"></button>`).join('')}</div></div>
+      <div class="model-row"><span class="model-label">Eye colour</span><div class="swatches">${Object.entries(EYES).map(([k, v]) => `<button class="swatch ${s.avatar.eyes === k ? 'on' : ''}" style="background:${v};border-radius:50%" data-eyes="${k}" title="eyes ${k}" aria-label="Eye colour ${k}"></button>`).join('')}</div></div>
+      <p class="muted small">These change how your model looks, not the score. Hairstyles are in the Hair tab.</p>
     </div>`;
   } else {
     let items = inv.filter((i) => i.slot === tab);
@@ -126,7 +140,7 @@ route('studio', () => {
     <div class="actions">
       <button class="btn ghost small" data-clear>Clear</button>
       <button class="btn ghost small" data-save-look>Save</button>
-      <button class="btn primary" data-submit ${worn().length ? '' : 'disabled'}>${b.battle ? 'Battle!' : b.ranked ? `Submit ${icon('bolt')}${RANKED.cost}` : b.tutorial ? 'Submit' : `Submit ${icon('bolt')}${MODES[mode].cost}`}</button>
+      <button class="btn primary" data-submit ${worn().length ? '' : 'disabled'}>${b.battle ? 'Battle!' : b.ranked ? 'Submit' : b.tutorial ? 'Submit' : `Submit ${icon('bolt')}${MODES[mode].cost}`}</button>
     </div>
   </div>`;
 }, { fixed: true });
@@ -188,7 +202,7 @@ function briefSheet(b) {
       ${b.required?.length ? `<div class="row"><span class="k">Must wear</span><span class="v">${b.required.map((x) => `<span class="chip">${esc(SLOTS[x] || x)}</span>`).join('')}</span></div>` : ''}
       ${b.mustTexture ? `<div class="row"><span class="k">Include</span><span class="v"><span class="chip">${esc(b.mustTexture)}</span></span></div>` : ''}
       ${b.forbid ? `<div class="row"><span class="k">Avoid</span><span class="v">${[...(b.forbid.textures || []), ...(b.forbid.items || []).map((id) => BY_ID[id]?.name.toLowerCase()), ...(b.forbid.slots || []), ...(b.forbid.colors ? ['listed colours'] : []), ...(b.forbid.prints ? ['prints'] : []), ...(b.forbid.heels ? ['heels'] : [])].map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</span></div>` : ''}
-      <div class="row"><span class="k">Rival</span><span class="v"><span class="chip on">a stylist at your level</span><span class="chip num">${b.credits} credits</span>${drop ? `<span class="chip">drops ${esc(drop.name)}</span>` : ''}</span></div>
+      <div class="row"><span class="k">Rival</span><span class="v"><span class="chip on">${b.battle ? 'your friend’s outfit' : b.ranked ? 'a stylist at your rank' : 'a stylist at your level'}</span>${b.battle || b.ranked ? '' : `<span class="chip num">${b.credits} credits</span>${drop ? `<span class="chip">drops ${esc(drop.name)}</span>` : ''}`}</span></div>
     </div>
     ${b.adapt ? `<div class="adapt"><span class="mono">${b.adapt.kind.toUpperCase()}</span> ${esc(b.adapt.text)}${b.adapt.bonus ? ` (+${b.adapt.bonus} credits)` : ''}. <a href="#you" style="text-decoration:underline">Why?</a></div>` : ''}
     <p class="muted" style="font-size:12px">The first vibe word matters most, so start with that one.</p>
@@ -225,7 +239,7 @@ function resultsSheet(res, b) {
   const lines = solo ? (res.passed ? st.win : st.lose) || [] : [];
   const line = lines[0];
   const rk = res.rewards.ranked;
-  return `<div class="sheet-wrap" role="dialog" aria-label="Result"><div class="scrim" data-close-sheet></div><aside class="sheet">
+  return `<div class="sheet-wrap" role="dialog" aria-label="Result"><div class="scrim" data-close-sheet></div><aside class="sheet" ${b.ranked ? 'data-ranked-result' : ''}>
     <button class="close" data-close-sheet>Close ×</button>
     <div class="eyebrow">${esc(b.title)} · ${b.ranked ? 'ranked match' : b.battle ? 'friendly battle' : MODES[res.rewards.mode]?.label.toLowerCase() || 'normal'}</div>
     ${rk ? `<div class="rank-change ${rk.delta >= 0 ? 'up' : 'down'}"><span class="rank-badge t${rk.after.tier}">${esc(rk.after.label)}</span><div><b>${rk.delta >= 0 ? '+' : ''}${rk.delta} rank points</b><span class="rank-bar"><i style="width:${rk.after.into}%"></i></span><small>${rk.after.label !== rk.before.label ? (rk.delta > 0 ? `Promoted from ${esc(rk.before.label)}!` : `Dropped from ${esc(rk.before.label)}`) : `${rk.after.into} of 100 to the next rank`}${rk.streak >= 2 ? ` · ${rk.streak} wins in a row` : ''}</small></div></div>` : ''}
@@ -237,14 +251,14 @@ function resultsSheet(res, b) {
       <div class="vs-col them"><div class="vs-fig">${figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' })}</div><b>${esc(b.pim ? `${o.bot.name}’s Pim` : o.bot.name)}</b><span class="n tier t-${gradeByMargin(-res.rewards.margin, o.total, b.pass)}">${gradeByMargin(-res.rewards.margin, o.total, b.pass)}</span></div>
     </div>
     <p class="muted small vs-note">${b.battle ? (res.passed ? `You beat ${esc(o.bot.name)}’s outfit! Send yours back and see if they can answer it.` : `${esc(o.bot.name)}’s outfit won this time. Restyle and try again, or send them a new challenge.`) : b.ranked ? (res.passed ? 'A ranked win. Keep the streak going for bonus points.' : 'A ranked loss costs a few points. The next match is a new brief and a new rival.') : res.passed ? (res.firstPass ? 'Cleared. The next level is open.' : b.tutorial ? 'Cleared again. The first level is for practice, so replays earn nothing.' : 'Cleared again. Replays pay 30% of the credits and sometimes give you a piece.') : `Beat ${esc(o.bot.name)} by a clear margin to earn an S. You still earned ${res.rewards.xp} XP for trying.`}</p>`; })()}
-    <div class="share-row"><button class="btn small primary" data-share-verdict>${icon('camera')} Share your result</button><button class="btn small ghost" data-challenge>${icon('sparkle')} Challenge a friend</button></div>
+    <div class="share-row"><button class="btn small primary" data-share-verdict>${icon('camera')} Share your result</button>${b.pim || b.secret || b.ranked ? '' : `<button class="btn small ghost" data-challenge>${icon('sparkle')} Challenge a friend</button>`}</div>
     ${installNudge(s)}
     ${res.rewards.levelUps?.length ? res.rewards.levelUps.map((u) => `<div class="levelup">${OBJ.star(40)}<div><b>Level ${u.level}</b><span>Your energy now goes up to ${u.energyMax} and has been refilled. You also earned ${u.credits} credits${u.thread ? ` and ${u.thread} Thread` : ''}.</span></div></div>`).join('') : ''}
-    ${res.passed ? `<div class="rewards"><div class="mono">You earned <b>${fmt(res.rewards.credits)} credits</b> · <b>${res.rewards.xp} XP</b>${res.rewards.thread ? ` · <b>${res.rewards.thread} Thread</b>` : ''}${sw.length ? ` · ${sw.map(([k, n]) => `${n} ${esc(k)}`).join(', ')}` : ''}${res.rewards.bonus.length ? `<span class="muted"> · ${res.rewards.bonus.map(esc).join(' · ')}</span>` : ''}</div>${rewardItems.map((it) => `<div class="reward-item"><div class="img">${thumb(it, s.avatar)}</div><div><div style="font-size:13px">${esc(it.name)}</div><div class="mono muted">${esc(SET_BY_ID[it.set]?.name || houseName(it.house))} · added to wardrobe</div></div></div>`).join('')}</div>` : ''}
+    ${res.passed && !b.battle ? `<div class="rewards"><div class="mono">You earned <b>${fmt(res.rewards.credits)} credits</b> · <b>${res.rewards.xp} XP</b>${res.rewards.thread ? ` · <b>${res.rewards.thread} Thread</b>` : ''}${sw.length ? ` · ${sw.map(([k, n]) => `${n} ${esc(k)}`).join(', ')}` : ''}${res.rewards.bonus.length ? `<span class="muted"> · ${res.rewards.bonus.map(esc).join(' · ')}</span>` : ''}</div>${rewardItems.map((it) => `<div class="reward-item"><div class="img">${thumb(it, s.avatar)}</div><div><div style="font-size:13px">${esc(it.name)}</div><div class="mono muted">${esc(SET_BY_ID[it.set]?.name || houseName(it.house))} · added to wardrobe</div></div></div>`).join('')}</div>` : ''}
     ${res.rewards.perfect && !b.secret ? `<div class="perfect-line ${res.grade === 'S' ? 's' : ''}"><span>${icon('star')} ${res.grade === 'S' ? `S on ${MODES[res.rewards.mode].label.toLowerCase()}${res.rewards.firstS ? ' · new' : ''}` : `${res.passed ? 'cleared, not perfect' : 'not yet'} · an S here counts toward the secret level`}</span><b class="num">${res.rewards.perfect.have}/${res.rewards.perfect.total}</b></div>` : ''}
     ${versusBars(res.dims, res.rewards.opponent.dims)}
     <ul class="notes">${res.critique.map((n) => `<li class="${res.dims.some((d) => d.praise.includes(n)) ? 'good' : ''}">${esc(n)}</li>`).join('')}</ul>
-    ${swap ? `<div class="swap"><span>Tip: ${swap.item ? (look[swap.slot] ? `wearing <b>${esc(swap.item.name)}</b> instead of ${esc(look[swap.slot].name)}` : `adding <b>${esc(swap.item.name)}</b>`) : `taking off <b>${esc(look[swap.slot]?.name)}</b>`} would raise your score to ${swap.score}.</span><button class="btn small" data-apply-swap="${swap.item?.id || ''}" data-swap-slot="${swap.slot}" data-close-sheet>Try it</button></div>` : ''}
+    ${swap && !b.ranked ? `<div class="swap"><span>Tip: ${swap.item ? (look[swap.slot] ? `wearing <b>${esc(swap.item.name)}</b> instead of ${esc(look[swap.slot].name)}` : `adding <b>${esc(swap.item.name)}</b>`) : `taking off <b>${esc(look[swap.slot]?.name)}</b>`} would raise your score to ${swap.score}.</span><button class="btn small" data-apply-swap="${swap.item?.id || ''}" data-swap-slot="${swap.slot}" data-close-sheet>Try it</button></div>` : ''}
     <div class="sheet-actions">
       ${b.ranked ? `<a class="btn primary block" href="#arena" data-close-sheet>Next ranked match</a><a class="btn block" href="#map" data-close-sheet>Back to Chapters</a>` : b.battle ? `<button class="btn primary block" data-challenge>Send your outfit back</button><button class="btn block" data-close-sheet>Restyle and battle again</button><a class="btn ghost block" href="#map" data-close-sheet>Back to Chapters</a>` : `${res.passed && next && next.id !== b.id ? `<button class="btn primary block" data-next="${next.id}">Next: ${esc(next.title)}</button>` : ''}
       <a class="btn block" href="#map" data-close-sheet>Back to the map</a>
@@ -273,47 +287,62 @@ document.addEventListener('click', (e) => {
   if (t.closest('[data-install]')) { promptInstall().then(() => { markSeen('installNudge'); rerender(); }); return; }
   if (t.closest('[data-install-later]')) { markSeen('installNudge'); t.closest('.install-nudge')?.remove(); return; }
   const nx = t.closest('[data-next]'); if (nx) { closeOverlay(); setLevel(nx.dataset.next, 'normal'); rerender(); return; }
-  if (t.closest('[data-close-sheet]')) { closeOverlay(); refresh(); return; }
+  if (t.closest('[data-close-sheet]')) { const rankedResult = $('#overlay [data-ranked-result]'); closeOverlay(); if (rankedResult && !t.closest('a[href]')) { navigate('#arena'); return; } refresh(); return; }
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#overlay')?.firstChild) { closeOverlay(); if ($('#stage')) refresh(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#overlay')?.firstChild) { const rankedResult = $('#overlay [data-ranked-result]'); closeOverlay(); if (rankedResult) navigate('#arena'); else if ($('#stage')) refresh(); } });
 
 /* ---------- submit: check, judging show with boosts, then the result ---------- */
 let judgingNow = false;
 function runSubmit() {
-  if (judgingNow) return;
+  if (judgingNow || special?.done) return;
   const b = resolveBrief(), s = state(), sp = special;
-  let pre;
-  if (sp) {
-    if (sp.kind === 'ranked' && energy() < RANKED.cost) { overlay(offerSheet('energy')); return; }
-    pre = { r: judgeAgainst(look, b, sp.opp), opp: sp.opp };
-  } else {
-    const chk = canSubmit(b);
-    if (!chk.ok) { if (chk.reason === 'energy') overlay(offerSheet('energy')); else if (chk.reason === 'attempts') overlay(runsSheet(b.id)); else { toast('That level is not open yet'); navigate('#map'); } return; }
-    pre = previewSubmit(look, b);
+  const sent = { ...look };   // the outfit as it is at this moment; nothing done during the show can change what is judged
+  let pre, token = null;
+  if (sp?.kind === 'ranked') {
+    const st = beginRanked(sent, sp);
+    if (!st.ok) { sp.done = true; toast('That match is already over.'); navigate('#arena'); return; }
+    token = st.token; pre = { r: judgeAgainst(sent, b, sp.opp), opp: sp.opp };
+  } else if (sp) pre = { r: judgeAgainst(sent, b, sp.opp), opp: sp.opp };
+  else {
+    const st = beginSubmit(sent, b);
+    if (!st.ok) { if (st.reason === 'energy') overlay(offerSheet('energy')); else if (st.reason === 'attempts') overlay(runsSheet(b.id)); else { toast('That level is not open yet'); navigate('#map'); } return; }
+    token = st.token; pre = st;
   }
   if (coachActive()) { stopCoach(); markSeen('coach'); }
   stopClock();
   const o = pre.opp, stageBox = '20 0 320 800';
   const myName = b.pim ? 'Your Pim' : s.avatar.name || 'You', rivalName = b.pim ? `${o.bot.name}’s Pim` : o.bot.name;
   judgingNow = true;
-  playJudging({ title: b.title, total: { you: pre.r.total, them: o.total }, gradeOf: (y, th) => gradeByMargin(y - th, y, b.pass),
-    you: { name: myName, tag: sp?.kind === 'ranked' ? rankOf(ranked().rp).label : '', svg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: stageBox }) },
+  const done = (bonus) => {
+    if (!judgingNow) return;
+    judgingNow = false;
+    try { finishSubmit(b, sp, bonus, myName, rivalName, sent, token); } catch (err) { console.error(err); toast('The result could not be shown. Your outfit was still judged.', 3600); refresh(); }
+  };
+  // if the show itself fails, the outfit is still judged, just without the show
+  try { playJudging({ title: b.title, cap: pre.r.cap, total: { you: pre.r.total, them: o.total }, gradeOf: (y, th) => gradeByMargin(y - th, y, b.pass),
+    you: { name: myName, tag: sp?.kind === 'ranked' ? rankOf(ranked().rp).label : '', svg: figure(sent, s.avatar, { depth: true, shadow: false, viewBox: stageBox }) },
     them: { name: rivalName, tag: o.rank?.label || '', svg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: stageBox, pose: 'mirror' }) },
     dims: pre.r.dims.map((d, i) => ({ key: d.key, label: d.label, max: d.max, you: d.score, them: o.dims[i]?.score ?? 0, themBoost: o.dims[i]?.boost || 0 })),
     board: (mine) => ({ title: 'Top stylists on this brief', ...levelBoard(b, o, mine, myName) }),
-  }, (bonus) => { judgingNow = false; finishSubmit(b, sp, bonus, myName, rivalName); });
+    boosts: Object.fromEntries(['catwalk', 'aura'].map((id) => { const st = boostState(id); return [id, { state: st.ready ? 'ready' : st.owned ? 'cooldown' : 'locked', leftMs: st.leftMs }]; })),
+    onBoost: (id) => useBoost(id),
+  }, done); } catch (err) { console.error(err); document.querySelector('.judge')?.remove(); done({}); }
 }
-function finishSubmit(b, sp, bonus, myName, rivalName) {
-  const res = sp ? (sp.kind === 'ranked' ? finishRanked(look, sp, bonus) : judgeAgainst(look, b, sp.opp, bonus)) : submit(look, b, { bonus });
-  if (!res.ok) { toast(res.reason === 'energy' ? 'Not enough energy' : 'That didn’t go through. Tap Submit again.'); refresh(); return; }
+function finishSubmit(b, sp, bonus, myName, rivalName, sent, token) {
+  // another tab (or a reload) may have settled this outfit already; it is never judged twice
+  if (!sp && pendingToken() !== token) { toast('This outfit was already judged in another tab.', 3600); rerender(); return; }
+  const res = sp ? (sp.kind === 'ranked' ? finishRanked(sent, sp, bonus) : judgeAgainst(sent, b, sp.opp, bonus)) : submit(sent, b, { bonus });
+  if (sp?.kind === 'ranked') sp.done = true;   // a ranked match is played once
+  if (!res.ok) { toast(res.reason === 'stale' ? 'That match was already finished.' : res.reason === 'energy' ? 'Not enough energy' : 'That didn’t go through. Tap Submit again.'); if (res.reason === 'stale') navigate('#arena'); else refresh(); return; }
+  look = { ...sent };
   const s = state(), o = res.rewards.opponent;
   if (!sp && look.hair) setAvatar({ hairStyle: look.hair.render.style });
   const st = sp ? null : storyFor(b.id);
   const ln = st ? ((res.passed ? st.win : st.lose) || []).find((l) => l[0] === 'ro') || ((res.passed ? st.win : st.lose) || [])[0] : null;
-  lastVerdict = { youSvg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' }), themSvg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' }), name: myName, rival: rivalName, yourTier: res.grade, theirTier: gradeByMargin(-res.rewards.margin, o.total, b.pass), word: marginWord(res.rewards.margin), line: ln ? ln[1] : GRADE_WORD[res.grade], brief: b.title, link: sp ? challengeLink(b) : briefLink(b.id, mode), pim: !!b.pim };
+  // the card prints the short link to the brief; a battle link is far too long for one line
+  lastVerdict = { youSvg: figure(look, s.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560' }), themSvg: figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' }), name: myName, rival: rivalName, yourTier: res.grade, theirTier: gradeByMargin(-res.rewards.margin, o.total, b.pass), word: marginWord(res.rewards.margin), line: ln ? ln[1] : GRADE_WORD[res.grade], brief: b.title, link: briefLink(b.id, sp ? 'normal' : mode), pim: !!b.pim };
   track('verdict', { id: b.id, mode: sp ? sp.kind : mode, grade: res.grade, passed: res.passed, margin: res.rewards.margin, first: res.firstPass });
   if (b.tutorial && res.passed) track('tutorial_done');
-  if (sp?.kind === 'ranked') special = null;   // a ranked match is played once
   renderTicker(); renderWallet();
   overlay(resultsSheet(res, b));
   if (res.passed) celebrate(res.grade === 'S' ? 36 : 22);
@@ -329,7 +358,8 @@ function challengeLink(b) {
 }
 async function sendChallenge() {
   const b = resolveBrief();
-  if (!worn().length) { toast('Put an outfit on first'); return; }
+  if (b.pim || b.secret) { toast('This level cannot be sent as a battle.'); return; }
+  if (!(look.dress || look.top)) { toast('Put on a top or a dress first'); return; }
   const url = challengeLink(b), who = state().avatar.name || 'A friend';
   const text = `${who} challenged you to a style battle on Serve: “${b.title}”. Can you beat this outfit?`;
   track('challenge_sent', { id: b.id });
@@ -340,18 +370,26 @@ async function sendChallenge() {
 function readChallenge(payload) {
   try {
     const p = dec(payload);
-    const a = p.a || {};
-    const avatar = { skin: Object.hasOwn(SKIN, a.skin) ? a.skin : 'fair', hairColor: Object.hasOwn(HAIR_COLORS, a.hairColor) ? a.hairColor : 'blonde', eyes: Object.hasOwn(EYES, a.eyes) ? a.eyes : 'blue', hairStyle: /^[A-Za-z]{1,20}$/.test(a.hairStyle || '') ? a.hairStyle : 'longWavy', lip: /^#[0-9a-fA-F]{6}$/.test(a.lip || '') ? a.lip : '#E2527F' };
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+    const a = p.a && typeof p.a === 'object' ? p.a : {};
+    // every value must be a plain string before it is looked at: an array would pass a pattern test and break the drawing
+    const str = (v) => (typeof v === 'string' ? v : '');
+    const pick = (list, v, d) => (Object.hasOwn(list, str(v)) ? str(v) : d);
+    const avatar = { skin: pick(SKIN, a.skin, 'fair'), hairColor: pick(HAIR_COLORS, a.hairColor, 'blonde'), eyes: pick(EYES, a.eyes, 'blue'), hairStyle: /^[A-Za-z]{1,20}$/.test(str(a.hairStyle)) ? str(a.hairStyle) : 'longWavy', lip: /^#[0-9a-fA-F]{6}$/.test(str(a.lip)) ? str(a.lip) : '#E2527F' };
     const items = {};
     for (const [slot, id] of Object.entries(p.i || {}).slice(0, 24)) if (typeof id === 'string' && id.length < 80 && (Object.hasOwn(SLOTS, slot) || slot === 'hair')) items[slot] = id;
-    const name = String(p.n || 'A friend').replace(/[^\p{L}\p{N} ._'’-]/gu, '').slice(0, 16) || 'A friend';
+    const name = (str(p.n) || 'A friend').replace(/[^\p{L}\p{N} ._'’-]/gu, '').slice(0, 16) || 'A friend';
     return { name, avatar, items };
   } catch (e) { return null; }
 }
 document.addEventListener('battlelink', (e) => {
   const go = (hash) => { history.replaceState(null, '', hash); window.dispatchEvent(new HashChangeEvent('hashchange')); };
-  const brief = battleBrief(e.detail.id), c = brief && readChallenge(e.detail.payload);
-  const opp = c && opponentFromLook(brief, c.items, { name: c.name, avatar: c.avatar });
+  let brief = null, c = null, opp = null;
+  try {
+    brief = battleBrief(e.detail.id); c = brief && readChallenge(e.detail.payload);
+    opp = c && opponentFromLook(brief, c.items, { name: c.name, avatar: c.avatar });
+    if (opp) renderLook(hydrate(opp.look), opp.bot.avatar, { depth: true, shadow: false, pose: 'mirror' });   // a rival that cannot be drawn is refused here, not in the middle of a battle
+  } catch (err) { opp = null; }
   if (!opp || !(opp.look.dress || opp.look.top)) { go('#map'); toast('That battle link could not be read.', 3600); return; }
   track('challenge_opened', { id: brief.id });
   setSpecial({ kind: 'battle', brief, opp });
@@ -364,9 +402,10 @@ let clock = 0;
 function stopClock() { clearInterval(clock); clock = 0; }
 function startClock() {
   stopClock();
-  if (special?.kind !== 'ranked') return;
+  if (special?.kind !== 'ranked' || special.done) return;
   const tick = () => {
-    if (special?.kind !== 'ranked') { stopClock(); return; }
+    if (special?.kind !== 'ranked' || special.done) { stopClock(); return; }
+    if (judgingNow) return;
     const left = Math.max(0, Math.ceil((special.deadline - Date.now()) / 1000));
     const el = $('#rankClock'); if (el) { el.textContent = `${left}s`; el.classList.toggle('low', left <= 15); }
     if (left <= 0) { stopClock(); toast('Time is up! Sending your outfit.'); runSubmit(); }
@@ -415,7 +454,12 @@ const TUTORIAL = [
   { target: '[data-submit]', text: 'When you’re happy with the outfit, tap Submit. It will be scored against another stylist’s outfit.', when: () => has('[aria-label="Result"]') },
 ];
 document.addEventListener('view:rendered', (e) => {
-  if (e.detail.name !== 'studio') { stopCoach(); stopClock(); special = null; return; }
+  if (e.detail.name !== 'studio') {
+    stopCoach(); stopClock();
+    // back to the story level that was open before the battle or the match, wearing its own outfit
+    if (dropSpecial()) { levelId = null; resolveBrief(); setLevel(levelId, mode); }
+    return;
+  }
   startClock();
   if (coachActive()) return;
   const b = resolveBrief();

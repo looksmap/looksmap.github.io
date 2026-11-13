@@ -3,16 +3,14 @@
 // so the rivals and the ladder are the game's computer stylists; the screen says so. The match itself is played in the
 // studio (setSpecial), so this file is only the lobby and the matchmaking sheet.
 import { route, esc, navigate, overlay, closeOverlay, toast, rerender, $ } from './app.js';
-import { state, ranked, rankOf, rankedMatch, rankedUnlocked, ladder, RANKED, energy } from '../engine/state.js';
+import { state, ranked, rankOf, rankedMatch, startRanked, rankedUnlocked, ladder, RANKED, FORFEIT_RP, energy } from '../engine/state.js';
 import { renderLook } from '../render/figure.js';
-import { MOOD_LABEL } from '../engine/moods.js';
-import { formalWord } from './map.js';
 import { setSpecial } from './studio.js';
 import { offerSheet } from './atelier.js';
 import { icon } from './icons.js';
 import { track } from '../engine/track.js';
 
-const TIER_COLOURS = ['#C98A5A', '#B9C2D0', '#F2C24A', '#7FD8D0', '#9CB8FF', '#FF7DBB'];
+const TIER_COLOURS = ['#F5A9C8', '#B79CFF', '#FF6FB3', '#7FD8D0', '#FFC93C', '#3A1030'];
 const badge = (rk, size = 96) => `<svg class="rank-emblem" viewBox="0 0 100 110" width="${size}" height="${size * 1.1}" aria-hidden="true">
   <defs><linearGradient id="rk${rk.tier}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="${TIER_COLOURS[rk.tier]}"/><stop offset="1" stop-color="${TIER_COLOURS[rk.tier]}" stop-opacity=".75"/></linearGradient></defs>
   <path d="M50,4 L92,20 V56 C92,82 72,98 50,106 C28,98 8,82 8,56 V20Z" fill="url(#rk${rk.tier})" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
@@ -32,9 +30,9 @@ route('arena', () => {
         <div class="rank-bar"><i style="width:${rk.into}%"></i></div>
         <p class="muted small">${rk.tier === 5 ? `${R.rp} rank points` : `${rk.into} of 100 points to the next rank`} · ${R.wins} won, ${R.losses} lost${R.streak >= 2 ? ` · ${R.streak} wins in a row` : ''}</p></div>
     </div>
-    ${open ? `<button class="btn primary block" data-find-rival ${e >= RANKED.cost ? '' : 'disabled'}>${e >= RANKED.cost ? `${icon('play')} Find a rival · ${RANKED.cost} energy` : 'Not enough energy'}</button>${e < RANKED.cost ? `<button class="btn ghost block" data-arena-energy>${icon('bolt')} Get energy</button>` : ''}` : `<div class="banner-warn">Ranked opens after you clear ${RANKED.unlockAfter} story levels, so you have a few outfits to choose from.</div>`}
+    ${open ? `<button class="btn primary block" data-find-rival ${e >= RANKED.cost ? '' : 'disabled'}>${e >= RANKED.cost ? `${icon('play')} Find a rival ${icon('bolt')}${RANKED.cost}` : `Not enough energy ${icon('bolt')}${RANKED.cost}`}</button>${e < RANKED.cost ? `<button class="btn ghost block" data-arena-energy>${icon('bolt')} Get energy</button>` : ''}` : `<div class="banner-warn">Ranked opens after you clear ${RANKED.unlockAfter} story levels, so you have a few outfits to choose from.</div>`}
     <div class="panel arena-how"><div class="panel-title">How a match works</div>
-      <ol><li>You and a rival at your rank get the same brief.</li><li>You have ${RANKED.seconds} seconds to style it from your own wardrobe.</li><li>Both of you can boost during judging. Win to gain rank points, and win several in a row for a bonus.</li></ol>
+      <ol><li>You and a rival at your rank get the same brief.</li><li>You have ${RANKED.seconds} seconds to style it from your own wardrobe.</li><li>Your rival boosts one line during judging, and you can use any boost you own. Win to gain rank points, and win several in a row for a bonus.</li><li>A match counts once it starts. Leaving before you send an outfit is a loss of ${FORFEIT_RP} points.</li></ol>
     </div>
     <div class="panel"><div class="panel-title">${icon('star')} Ladder near you</div>
       <ol class="ladder">${shown.map((r) => `<li class="${r.you ? 'you' : ''}"><span class="pl">${r.place}</span><span class="nm">${esc(r.name)}</span><span class="rk t${r.rank.tier}">${esc(r.rank.label)}</span><span class="sc">${r.rp}</span></li>`).join('')}</ol>
@@ -47,17 +45,16 @@ let pending = null;
 function matchSheet(found) {
   const s = state();
   if (!found) return `<div class="sheet-wrap" role="dialog" aria-label="Finding a rival"><div class="scrim"></div><aside class="sheet match"><div class="match-wait"><span class="match-spin"></span><h2 class="display display-m">Finding a rival…</h2><p class="muted">Looking for a stylist near ${esc(rankOf(ranked().rp).label)}</p></div></aside></div>`;
-  const { brief: b, opp: o } = pending;
+  const { opp: o } = pending;
   return `<div class="sheet-wrap" role="dialog" aria-label="Rival found"><div class="scrim" data-close-sheet></div><aside class="sheet match">
     <button class="close" data-close-sheet>Close ×</button>
     <div class="eyebrow">Rival found</div>
     <div class="match-vs"><div class="mv"><div class="mv-fig">${renderLook({}, s.avatar, { depth: true, shadow: false, viewBox: '86 4 188 190', pose: false })}</div><b>${esc(s.avatar.name || 'You')}</b><span>${esc(rankOf(ranked().rp).label)}</span></div>
       <span class="match-x">VS</span>
       <div class="mv"><div class="mv-fig them">${renderLook({}, o.bot.avatar, { depth: true, shadow: false, viewBox: '86 4 188 190', pose: false })}</div><b>${esc(o.bot.name)}</b><span>${esc(o.rank.label)}</span></div></div>
-    <h2 class="display display-m">${esc(b.title)}</h2>
-    <p class="muted small">${esc(b.copy)}</p>
-    <div class="row"><span class="chip on">${formalWord(b.formality)}</span>${b.mood.map((m, i) => `<span class="chip ${i === 0 ? 'on' : ''}">${esc(MOOD_LABEL(m))}</span>`).join('')}</div>
-    <div class="sheet-actions"><button class="btn primary block" data-start-match>${icon('play')} Start styling · ${RANKED.seconds} seconds</button></div>
+    <h2 class="display display-m">The brief is a surprise</h2>
+    <p class="muted small">You both see the brief when the clock starts. The match costs ${RANKED.cost} energy and counts from that moment, so start when you are ready.</p>
+    <div class="sheet-actions"><button class="btn primary block" data-start-match>${icon('play')} Start styling · ${RANKED.seconds} seconds ${icon('bolt')}${RANKED.cost}</button></div>
   </aside></div>`;
 }
 document.addEventListener('click', (e) => {
@@ -71,10 +68,13 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (t.closest('[data-start-match]') && pending) {
-    const m = pending; pending = null;
+    pending = null;
     closeOverlay();
+    setSpecial(null);   // closes any battle that was open, before the match is written down
+    const m = startRanked();
+    if (!m.ok) { if (m.reason === 'energy') overlay(offerSheet('energy')); else rerender(); return; }
     track('ranked_start', { id: m.brief.id });
-    setSpecial({ kind: 'ranked', brief: m.brief, opp: m.opp, deadline: Date.now() + RANKED.seconds * 1000 });
+    setSpecial({ kind: 'ranked', seed: m.seed, brief: m.brief, opp: m.opp, deadline: m.deadline });
     navigate('#studio');
   }
 });

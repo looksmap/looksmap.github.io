@@ -100,7 +100,7 @@ export function scoreLook(look, brief) {
   const say = (dim, text, good = false) => { (good ? notes.good : notes.fix).push({ dim, text }); };
 
   if (!garments.length) {
-    return { total: 0, grade: 'D', dims: DIMS.map((d) => ({ ...d, score: 0, notes: [], praise: [] })), critique: ['Put on a top, a bottom or a dress to get started.'], context: c, gated: 'undressed', lead: null, palette: null, noise: 0, load: 0, raw: 0, dressed: false };
+    return { total: 0, grade: 'D', dims: DIMS.map((d) => ({ ...d, score: 0, notes: [], praise: [] })), critique: ['Put on a top, a bottom or a dress to get started.'], context: c, gated: 'undressed', lead: null, palette: null, noise: 0, load: 0, raw: 0, dressed: false, cap: 35 };
   }
 
   /* ---------- 1. Brief fit (20) ---------- */
@@ -315,7 +315,9 @@ export function scoreLook(look, brief) {
   else if (gated === 'mood') critique.unshift(`${!moodHits[0].ok ? `“${MOOD_LABEL(moodHits[0].m)}” is the first vibe word in the brief, and this outfit doesn’t show it` : `Some vibe words are missing (${moodHits.filter((x) => !x.ok).map((x) => MOOD_LABEL(x.m)).join(', ')})`}. The score can’t go above 70 until they come through.`);
   else if (gated === 'dresscode-soft') critique.unshift('This is a good outfit, but it’s one step away from the dress code. The score can’t go above 68 until that is fixed.');
   else if (gated) critique.unshift('This is a nice outfit, but it doesn’t fit the brief. The score can’t go above 50 until it does.');
-  return { total, grade, dims: dimsOut, critique, context: c, gated, lead: a1, palette: pal.template, noise, load, raw, dressed };
+  // the ceiling the notes above talk about; boosts won in the judging show stop at it too
+  const cap = gated === 'undressed' ? 35 : gated === 'dresscode' || gated === true ? 50 : gated === 'dresscode-soft' ? 68 : gated === 'mood' ? 70 : 100;
+  return { total, grade, dims: dimsOut, critique, context: c, gated, cap, lead: a1, palette: pal.template, noise, load, raw, dressed };
 }
 
 // Tiers instead of numbers everywhere the player looks. A look's tier is where it lands against the level's pass mark;

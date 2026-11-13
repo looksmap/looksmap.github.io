@@ -8,6 +8,7 @@ import { sceneSVG, coverSVG, ribbon, WORLD, pinFill } from './mapart.js';
 import { icon } from './icons.js';
 import { spline } from '../render/rig.js';
 import { MOOD_LABEL } from '../engine/moods.js';
+import { BACKDROPS, backdropSVG } from './backdrops.js';
 import { ranked, rankOf, rankedUnlocked, RANKED } from '../engine/state.js';
 import { SLOTS } from '../data/catalog.js';
 import { playStory, storyFor } from './story.js';
@@ -57,19 +58,20 @@ function novelCard(n) {
 const LIPS = { rose: '#E2527F', nude: '#C4707A', cherry: '#9A1B2E', peach: '#D08A7A', wine: '#6E1F3A', barbie: '#F06BAE', mauve: '#B86B6F', petal: '#E39DB6' };
 function homeLook(s) {
   const last = s.history.find((h) => !LEVELS[h.briefId]?.pim);
-  if (last) return hydrate(last.items);
+  // the last outfit she wore, with her current hairstyle (the avatar's), not the one from that day
+  if (last) { const lk = hydrate(last.items); delete lk.hair; return lk; }
   return hydrate({ top: 't_tee', bottom: 'b_jeans', shoes: 's_ballet', hair: `hr_${(s.avatar.hairStyle || 'longWavy').replace(/[A-Z]/g, (m) => '_' + m.toLowerCase())}` });
 }
 // what the model wears on the very first screen, before the player owns anything
 const INTRO_LOOK = { dress: 'd_babydoll', shoes: 's_maryjane', head: 'hd_bow', neck: 'nk_ribbon', hair: 'hr_long_wavy' };
 function home(s) {
   const next = nextOpenLevel();
-  if (!s.seen.intro) return `<section class="intro"><div class="intro-stage">${coverSVG('c1', 360, 330, { label: false, ns: '-intro' })}<div class="intro-fig">${renderLook(hydrate(INTRO_LOOK), s.avatar, { depth: true, shadow: false, viewBox: '30 0 300 500', label: 'Your model' })}</div></div><div class="intro-body"><h1 class="display display-xl">Serve</h1><p>Dress your model for every occasion and see how your outfit scores.</p><button class="btn primary block" data-start-tutorial>${icon('play')} Start</button><p class="muted small">Your first outfit takes about two minutes.</p></div></section>`;
+  if (!s.seen.intro) return `<section class="intro"><div class="intro-stage">${backdropSVG(s.avatar.backdrop)}<div class="intro-fig">${renderLook(hydrate(INTRO_LOOK), s.avatar, { depth: true, shadow: false, viewBox: '30 0 300 500', label: 'Your model' })}</div></div><div class="intro-body"><h1 class="display display-xl">Serve</h1><p>Dress your model for every occasion and see how your outfit scores.</p><button class="btn primary block" data-start-tutorial>${icon('play')} Start</button><p class="muted small">Your first outfit takes about two minutes.</p></div></section>`;
   const ch = next ? CHAPTER_BY_ID[next.chapter] : null;
   const o = overall();
   const name = s.avatar.name;
   return `<section class="me">
-    <div class="me-stage">${coverSVG(ch?.world || 'c1', 360, 420, { label: false, ns: '-me' })}<div class="me-fig">${renderLook(homeLook(s), s.avatar, { depth: true, shadow: true, viewBox: '40 0 280 560' })}</div>
+    <div class="me-stage">${backdropSVG(s.avatar.backdrop)}<div class="me-fig">${renderLook(homeLook(s), s.avatar, { depth: true, shadow: true, viewBox: '40 0 280 560' })}</div>
       <button class="glass-btn me-edit" data-edit-avatar aria-label="Customise your avatar">${icon('sparkle')}</button>
       <div class="me-badge">Lv ${s.level}</div>
     </div>
@@ -94,7 +96,7 @@ function avatarSheet(s) {
     <button class="close" data-close-sheet>Done</button>
     <div class="eyebrow">Your avatar</div>
     <div class="av-grid">
-      <div class="av-fig">${renderLook(homeLook(s), a, { depth: true, shadow: false, viewBox: '70 0 220 330' })}</div>
+      <div class="av-fig">${backdropSVG(a.backdrop)}${renderLook(homeLook(s), a, { depth: true, shadow: false, viewBox: '70 0 220 330' })}</div>
       <div class="av-form">
         <label class="field-label">Name<input class="field" type="text" maxlength="16" placeholder="Her name" value="${esc(a.name || '')}" data-av-name autocomplete="off"></label>
         <div class="field-label">Skin${sw(SKIN, 'skin', 'skin')}</div>
@@ -103,6 +105,8 @@ function avatarSheet(s) {
         <div class="field-label">Hair colour${sw(HAIR_COLORS, 'hairColor', 'hair')}</div>
       </div>
     </div>
+    <div class="field-label" style="margin-top:12px">Background</div>
+    <div class="bd-row">${Object.entries(BACKDROPS).map(([k, b]) => `<button class="bd ${(a.backdrop || 'salon') === k ? 'on' : ''}" data-av-backdrop="${k}" aria-pressed="${(a.backdrop || 'salon') === k}">${backdropSVG(k)}<span>${esc(b.name)}</span></button>`).join('')}</div>
     <div class="field-label" style="margin-top:12px;display:flex;gap:6px;align-items:baseline">Hairstyle <span class="muted" style="text-transform:none;letter-spacing:0">· more drop from levels</span></div>
     <div class="tiles av-hair">${hairs.map((i) => `<button class="tile ${a.hairStyle === i.render.style ? 'on' : ''}" data-av-style="${i.render.style}"><div class="img">${lazyThumb(i, a)}</div><div class="cap"><span class="name">${esc(i.name)}</span></div></button>`).join('')}</div>
   </aside></div>`;
@@ -166,7 +170,11 @@ function mapView(ch, s) {
     const here = i === next;
     const side = p.x > 180 ? -1 : 1;
     const label = res?.passed ? res.grade : unlocked ? String(i + 1) : '';
-    const tagW = lv.title.length * 6.6 + 20;
+    // the name tag stays inside the 360-wide map: a title too long for its side is shortened
+    const room = (side > 0 ? 360 - p.x : p.x) - 36 - 6;
+    const fit = Math.max(4, Math.floor((room - 20) / 6.6));
+    const tagText = lv.title.length > fit ? `${lv.title.slice(0, fit - 1).trimEnd()}…` : lv.title;
+    const tagW = tagText.length * 6.6 + 20;
     return `<g class="node ${cls}${here ? ' here' : ''}" data-level="${id}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})" tabindex="${unlocked ? 0 : -1}" role="button" aria-label="Level ${i + 1}: ${esc(lv.title)}${res?.passed ? `, grade ${res.grade}` : unlocked ? '' : ', locked'}">
       <circle r="32" cy="-14" class="halo"/>
       <ellipse class="pshadow" cy="10" rx="18" ry="5"/>
@@ -175,7 +183,7 @@ function mapView(ch, s) {
       <path class="spec" d="M-13,-19 q2,-11 14,-13 q-8,5 -9,13 q-2,3 -5,0Z"/>
       ${res?.passed || unlocked ? `<text class="lbl" y="-13" text-anchor="middle" dominant-baseline="central">${label}</text>` : `<use href="#i-lock" x="-8" y="-22" width="16" height="16" class="lockic"/>`}
       <g class="stars">${['easy', 'normal', 'hard'].map((m, k) => { const r = resultOf(id, m); return `<path d="${starD((k - 1) * 13, 20 - Math.abs(k - 1) * 2.5, 6)}" class="${r?.grade === 'S' ? 's' : r?.passed ? 'ok' : ''}"/>`; }).join('')}</g>
-      <g class="tag" transform="translate(${side * 36},${-16})"><rect x="${side > 0 ? 0 : -tagW}" y="-13" width="${tagW}" height="26" rx="13"/><text x="${side > 0 ? 10 : -10}" text-anchor="${side > 0 ? 'start' : 'end'}" dominant-baseline="central">${esc(lv.title)}</text></g>
+      <g class="tag" transform="translate(${side * 36},${-16})"><rect x="${side > 0 ? 0 : -tagW}" y="-13" width="${tagW}" height="26" rx="13"/><text x="${side > 0 ? 10 : -10}" text-anchor="${side > 0 ? 'start' : 'end'}" dominant-baseline="central">${esc(tagText)}</text></g>
       ${here ? `<g class="playhere"><g><rect x="-27" y="-76" width="54" height="26" rx="13"/><path d="M-6,-51 l6,7 l6,-7Z"/><text y="-63" text-anchor="middle" dominant-baseline="central">Play</text></g></g>` : ''}
     </g>`;
   }).join('');
@@ -304,6 +312,7 @@ document.addEventListener('click', (e) => {
   const ey = t.closest('[data-av-eyes]'); if (ey) { setAvatar({ eyes: ey.dataset.avEyes }); openAvatar(); rerender(); return; }
   const lp = t.closest('[data-av-lip]'); if (lp) { setAvatar({ lip: LIPS[lp.dataset.avLip] }); openAvatar(); rerender(); return; }
   const hc = t.closest('[data-av-hair]'); if (hc) { setAvatar({ hairColor: hc.dataset.avHair }); clearThumbs(); openAvatar(); rerender(); return; }
+  const bd = t.closest('[data-av-backdrop]'); if (bd) { setAvatar({ backdrop: bd.dataset.avBackdrop }); openAvatar(); rerender(); return; }
   const hs = t.closest('[data-av-style]'); if (hs) { setAvatar({ hairStyle: hs.dataset.avStyle }); openAvatar(); rerender(); return; }
   if (t.closest('.av-sheet') === null && t.closest('[data-close-sheet]') && document.querySelector('.av-sheet')) { rerender(); }
 });

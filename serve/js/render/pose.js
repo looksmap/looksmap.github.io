@@ -32,9 +32,11 @@ export function armWarp(body) {
   return (x, y) => {
     const s = x < CX ? -1 : 1;
     const [a1, a2] = ARM[s];
+    // nothing swings at the centre line and the swing grows toward the arm, so a strap that crosses the body stays in one piece
+    const w = sm(16, 42, Math.abs(x - CX));
     let p = [x, y];
-    p = rot(p[0], p[1], CX + s * 75, 300, s * a2 * sm(285, 318, y));          // forearm in, about the elbow
-    p = rot(p[0], p[1], CX + s * 50, 172, -s * a1 * sm(165, 250, y));         // whole arm out, about the shoulder
+    p = rot(p[0], p[1], CX + s * 75, 300, s * a2 * w * sm(285, 318, y));      // forearm in, about the elbow
+    p = rot(p[0], p[1], CX + s * 50, 172, -s * a1 * w * sm(165, 250, y));     // whole arm out, about the shoulder
     return body(p[0], p[1]);
   };
 }

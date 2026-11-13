@@ -1,10 +1,12 @@
 // The judging show that plays between Submit and the result sheet. The two stylists stand side by side under the
 // lights; each scoring line is revealed in turn with a bar for each side and the totals count up. While it runs the
-// player has two boosts, each usable once: Catwalk (+2 on each of the next three lines) and Aura (+4 on the next
-// line). A boost never lifts a line above its maximum, so it is worth saving for a line that needs it. Then the
+// player can use the boosts they own and that are off cooldown: Catwalk (+2 on each of the next three lines) and Aura
+// (+4 on the next line). A boost never lifts a line above its maximum, so it is worth saving for a line that needs
+// it. The caller says which boosts are ready (d.boosts) and is told the moment one is used (d.onBoost). Then the
 // winner is announced, the board for this brief appears for a moment, and the show closes by itself.
-// A tap speeds it along, Skip closes it, and when the device asks for less motion the boosts are placed
-// automatically and the show is not played.
+// A tap speeds it along and Skip closes it. While it is up the screen behind it cannot be reached, by pointer or by
+// keyboard, and focus starts on the first boost that is ready. When the device asks for less motion the show is not
+// played, and a ready boost is used only when it changes the grade, so it is never spent for nothing.
 import { $, esc, reduced } from './app.js';
 
 const STEP = 900;      // one scoring line
@@ -12,43 +14,62 @@ export const BOOSTS = [
   { id: 'catwalk', name: 'Catwalk', lines: 3, plus: 2, hint: '+2 on the next 3 lines' },
   { id: 'aura', name: 'Aura', lines: 1, plus: 4, hint: '+4 on the next line' },
 ];
-let active = null;     // { node, timers, onKey }
+let active = null;     // { node, timers, onKey, inert, focus }
 
 function close() {
   if (!active) return;
   for (const t of active.timers) clearTimeout(t);
   document.removeEventListener('keydown', active.onKey, true);
   active.node.remove();
+  for (const el of active.inert) el.inert = false;
+  const back = active.focus;
   active = null;
+  if (back && back.isConnected) try { back.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
 }
-function tween(el, from, to, ms = 360) {
+// alive() turns false when the totals have been set to their final values, so a count still running cannot write over them
+function tween(el, from, to, alive, ms = 360) {
   const t0 = performance.now();
-  const tick = (t) => { const p = Math.min(1, (t - t0) / ms); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3))); if (p < 1 && el.isConnected) requestAnimationFrame(tick); };
+  const tick = (t) => { if (!alive()) return; const p = Math.min(1, (t - t0) / ms); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3))); if (p < 1 && el.isConnected) requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
 }
 // Where the boosts do the most good, for players who do not see the show.
-function autoBonus(dims) {
+export function autoBonus(dims, ready) {
   const room = dims.map((r) => r.max - r.you), bonus = {};
+  if (!ready.catwalk && !ready.aura) return bonus;
   const add = (i, n) => { const g = Math.min(n, room[i]); if (g > 0) { room[i] -= g; bonus[dims[i].key] = (bonus[dims[i].key] || 0) + g; } };
   let best = 0, bestGain = -1;
   for (let i = 0; i < dims.length; i++) { const g = [0, 1, 2].reduce((a, k) => a + Math.min(2, room[i + k] ?? 0), 0); if (g > bestGain) { bestGain = g; best = i; } }
-  for (let k = 0; k < 3 && best + k < dims.length; k++) add(best + k, 2);
-  add(room.indexOf(Math.max(...room)), 4);
+  if (ready.catwalk) for (let k = 0; k < 3 && best + k < dims.length; k++) add(best + k, 2);
+  if (ready.aura) add(room.indexOf(Math.max(...room)), 4);
   return bonus;
 }
 
 /**
  * d: { title, you: { name, svg, tag? }, them: { name, svg, tag? }, dims: [{ key, label, max, you, them, themBoost? }],
- *      total: { you, them }, gradeOf(you, them) → letter, board(you) → { title, rows: [{ place, name, score, you? }], place, of } | null }
+ *      total: { you, them }, gradeOf(you, them) → letter, board(you) → { title, rows: [{ place, name, score, you? }], place, of } | null,
+ *      boosts: { catwalk: { state: 'ready' | 'cooldown' | 'locked', leftMs }, aura: {...} }, onBoost(id) }
  * done(bonus, yourTotal) runs exactly once. bonus is { lineKey: points } won with the boosts.
  */
 export function playJudging(d, done) {
   close();
   const base = d.dims.reduce((a, r) => a + r.you, 0), off = d.total.you - base;
-  const totalWith = (bonus) => Math.min(100, d.total.you + Object.values(bonus).reduce((a, b) => a + b, 0));
-  if (reduced() || !$('#device')) { const b = autoBonus(d.dims); done(b, totalWith(b)); return; }
+  // an outfit held under a ceiling by the brief (d.cap) stays under it, boosts or not: the same rule the saved score uses
+  const totalWith = (bonus) => Math.max(d.total.you, Math.min(d.cap ?? 100, d.total.you + Object.values(bonus).reduce((a, b) => a + b, 0)));
+  const stateOf = (id) => d.boosts?.[id]?.state || 'locked';
+  const mmss = (ms) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  if (reduced() || !$('#device')) {
+    const ready = { catwalk: stateOf('catwalk') === 'ready', aura: stateOf('aura') === 'ready' };
+    const gradeWith = (b) => d.gradeOf(totalWith(b), d.total.them);
+    const plain = gradeWith({});
+    // the cheapest choice that reaches the best grade: nothing, then one boost, then both
+    const tries = [{}, { catwalk: ready.catwalk }, { aura: ready.aura }, ready].map((use) => ({ use, bonus: autoBonus(d.dims, { catwalk: !!use.catwalk, aura: !!use.aura }) }));
+    const best = gradeWith(tries[3].bonus);
+    const pick = best === plain ? tries[0] : tries.find((t) => gradeWith(t.bonus) === best);
+    for (const id of Object.keys(pick.use)) if (pick.use[id]) d.onBoost?.(id);
+    done(pick.bonus, totalWith(pick.bonus)); return;
+  }
   const node = document.createElement('div');
-  node.className = 'judge'; node.setAttribute('role', 'dialog'); node.setAttribute('aria-label', 'Judging');
+  node.className = 'judge'; node.setAttribute('role', 'dialog'); node.setAttribute('aria-modal', 'true'); node.setAttribute('aria-label', 'Judging');
   node.innerHTML = `
     <div class="judge-lights" aria-hidden="true"><i></i><i></i><i></i></div>
     <header class="judge-head"><span class="judge-kicker">Judging</span><h2>${esc(d.title)}</h2></header>
@@ -57,7 +78,7 @@ export function playJudging(d, done) {
       <div class="judge-vs" aria-hidden="true">VS</div>
       <div class="judge-side them"><div class="judge-fig">${d.them.svg}</div><span class="judge-pop"></span><div class="judge-plate"><b>${esc(d.them.name)}</b>${d.them.tag ? `<small>${esc(d.them.tag)}</small>` : ''}<span class="judge-score" data-score="them">0</span></div></div>
     </div>
-    <div class="judge-boosts">${BOOSTS.map((b) => `<button type="button" class="judge-boost" data-boost="${b.id}"><b>${b.name}</b><small>${b.hint}</small></button>`).join('')}</div>
+    <div class="judge-boosts">${BOOSTS.map((b) => { const st = stateOf(b.id); return `<button type="button" class="judge-boost ${st}" data-boost="${b.id}" ${st === 'ready' ? '' : 'disabled'}><b>${b.name}</b><small>${st === 'ready' ? b.hint : st === 'cooldown' ? `Ready in ${mmss(d.boosts[b.id].leftMs)}` : 'Locked · buy it in the Shop'}</small></button>`; }).join('')}</div>
     <div class="judge-round" aria-live="polite">
       <div class="judge-label">Get ready…</div>
       <div class="judge-next">First up: ${esc(d.dims[0].label)}</div>
@@ -67,8 +88,13 @@ export function playJudging(d, done) {
     <div class="judge-final" hidden><span class="judge-result"></span><span class="judge-grade"></span><span class="judge-tally"></span></div>
     <div class="judge-board" hidden></div>
     <button class="judge-skip" type="button">Skip</button>`;
+  const focus = document.activeElement;
   $('#device').appendChild(node);
+  const inert = [...$('#device').children].filter((el) => el !== node && !el.inert);
+  for (const el of inert) el.inert = true;
   const q = (s) => node.querySelector(s);
+  let alive = true;
+  const live = () => alive;
   const timers = [];
   const at = (ms, fn) => timers.push(setTimeout(fn, ms));
   let you = 0, them = 0, phase = 'rounds', ended = false, shown = 0;
@@ -104,14 +130,14 @@ export function playJudging(d, done) {
     const lead = mine > r.them ? 'you' : r.them > mine ? 'them' : '';
     dots[i]?.classList.add(lead || 'tie');
     at(300, () => {
-      tween(scoreEl.you, you, you + mine); tween(scoreEl.them, them, them + r.them);
+      tween(scoreEl.you, you, you + mine, live); tween(scoreEl.them, them, them + r.them, live);
       you += mine; them += r.them;
       for (const k of ['you', 'them']) { const side = q(`.judge-side.${k}`); side.classList.remove('hit'); void side.offsetWidth; if (lead === k) side.classList.add('hit'); }
     });
   }
   function final() {
     if (phase !== 'rounds') return;
-    phase = 'final';
+    phase = 'final'; alive = false;
     for (const t of timers.splice(0)) clearTimeout(t);
     for (let i = shown; i < d.dims.length; i++) { scoreLine(i); const r = d.dims[i]; dots[i]?.classList.add(r.you > r.them ? 'you' : r.them > r.you ? 'them' : 'tie'); }   // lines not yet shown still count, with any boost that was running
     const mine = totalWith(bonus), passed = mine >= d.total.them, grade = d.gradeOf(mine, d.total.them);
@@ -124,6 +150,7 @@ export function playJudging(d, done) {
     q('.judge-tally').textContent = `${mine} to ${d.total.them}`;
     q('.judge-final').hidden = false;
     q('.judge-skip').textContent = 'Continue';
+    if (node.contains(document.activeElement) && document.activeElement !== q('.judge-skip')) q('.judge-skip').focus({ preventScroll: true });   // the boosts are finished
     at(2000, board);
   }
   // the board for this brief: shown for a moment, then the show closes by itself
@@ -149,21 +176,26 @@ export function playJudging(d, done) {
       label.textContent = 'Brief rules'; label.classList.remove('pop'); void label.offsetWidth; label.classList.add('pop'); nextEl.textContent = '';
       bars.you.querySelector('b').textContent = `${off}`; bars.them.querySelector('b').textContent = '';
       for (const k of ['you', 'them']) bars[k].querySelector('i').style.width = '0%';
-      at(300, () => { tween(scoreEl.you, you, you + off); you += off; });
+      at(300, () => { tween(scoreEl.you, you, you + off, live); you += off; });
     });
     t += STEP;
   }
   at(t + 200, final);
 
   const advance = () => { if (phase === 'rounds') final(); else if (phase === 'final') board(); else end(); };
-  const onKey = (e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); advance(); } };
+  // Escape moves the show on. Enter does too, unless a button in the show has focus: then it presses that button.
+  const onKey = (e) => {
+    if (e.key !== 'Escape' && e.key !== 'Enter') return;
+    if (e.key === 'Enter' && e.target instanceof Element && node.contains(e.target) && e.target.closest('button')) return;
+    e.preventDefault(); e.stopImmediatePropagation(); advance();
+  };
   document.addEventListener('keydown', onKey, true);
   node.addEventListener('click', (e) => {
     const bb = e.target.closest('[data-boost]');
     if (bb) {
       const b = BOOSTS.find((x) => x.id === bb.dataset.boost);
-      if (phase !== 'rounds' || used[b.id] || shown >= d.dims.length) return;
-      used[b.id] = true; left[b.id] = b.lines;
+      if (phase !== 'rounds' || used[b.id] || shown >= d.dims.length || stateOf(b.id) !== 'ready') return;
+      used[b.id] = true; left[b.id] = b.lines; d.onBoost?.(b.id);
       bb.classList.add('used', 'on'); bb.disabled = true;
       q('.judge-side.you').classList.add(b.id === 'catwalk' ? 'strut' : 'aura');
       pop('you', `${b.name}!`);
@@ -172,5 +204,6 @@ export function playJudging(d, done) {
     if (e.target.closest('.judge-skip')) { if (phase === 'board') end(); else advance(); return; }
     if (phase !== 'rounds') advance();   // during the lines a stray tap does nothing, so boosts are never lost by accident
   });
-  active = { node, timers, onKey };
+  active = { node, timers, onKey, inert, focus };
+  (q('.judge-boost:not([disabled])') || q('.judge-skip')).focus({ preventScroll: true });
 }

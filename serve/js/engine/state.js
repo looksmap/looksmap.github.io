@@ -26,18 +26,20 @@ const fresh = () => ({
   shop: { daily: null, refills: { day: null, n: 0 }, fabrics: { day: null, n: 0 }, monthly: null, monthlyClaimed: null, firstBuy: {}, signin: { last: null, streak: 0 }, gifts: {} },
   runs: { day: null, byLevel: {} }, tickets: 0,
   owned: [...STARTER_IDS],
-  avatar: { name: '', skin: 'fair', hairStyle: 'longWavy', hairColor: 'blonde', lip: '#E2527F', eyes: 'blue' },
+  avatar: { name: '', skin: 'fair', hairStyle: 'longWavy', hairColor: 'blonde', lip: '#E2527F', eyes: 'blue', backdrop: 'salon' },
   results: {},          // levelId -> { easy: R, normal: R, hard: R, secret: R } where R = { best, grade, attempts, passed, failsInRow }
   history: [],
   skill: 68,
   streak: 0, lastDay: null, dailyDone: {},
   looks: [],
-  capsule: { pulls: 0, sincePity: 0 },
+  capsule: { pulls: 0, sincePity: 0, freeDay: null },
+  boosts: { catwalk: { owned: false, readyAt: 0 }, aura: { owned: false, readyAt: 0 } },
   dyes: {},             // itemId -> { color?, print? }
   swatches: { cotton: 6, denim: 2, leather: 1, dye: 2, print: 1 },
   energy: 64, energyAt: Date.now(),
   seen: { intro: false },
-  ranked: { rp: 0, wins: 0, losses: 0, streak: 0, best: 0, played: 0 },
+  ranked: { rp: 0, wins: 0, losses: 0, streak: 0, best: 0, played: 0, live: null },   // live: { seed, deadline } while a match is being played
+  pending: null,        // an outfit sent for judging whose result is not saved yet: { kind, id, mode, items, at }
   setsClaimed: {},
   chapterBonus: {}, perfectBonus: {},
   createdAt: Date.now(),
@@ -218,9 +220,9 @@ export function signIn() {
 /* ---------------- wardrobe ---------------- */
 export const owns = (id) => OWNED.has(id);
 export function item(id) {
-  const base = BY_ID[id];
-  if (!base) return null;
-  const mod = S.dyes[id];
+  const base = typeof id === 'string' ? BY_ID[id] : null;
+  if (!base || typeof base !== 'object' || base.id !== id) return null;   // 'constructor' and friends are not pieces
+  const mod = Object.hasOwn(S.dyes, id) ? S.dyes[id] : null;
   if (!mod) return base;
   const out = { ...base, dyed: true };
   if (mod.color) { out.color = mod.color; out.colors = [mod.color, ...(base.colors.slice(1))]; }
@@ -420,8 +422,8 @@ const wearable = (look) => Object.fromEntries(Object.entries(look).filter(([k, v
 // Boost points won during the judging show: { lineKey: points }. A line can never go above its maximum.
 export function applyBonus(r, bonus) {
   let add = 0;
-  if (bonus) for (const d of r.dims) { const n = Math.max(0, Math.min(bonus[d.key] || 0, d.max - d.score)); if (n) { d.score += n; add += n; } }
-  if (add) { r.total = Math.min(100, r.total + add); r.boost = add; }
+  if (bonus) for (const d of r.dims) { const n = Math.max(0, Math.min(Math.floor(Number(bonus[d.key]) || 0), d.max - d.score, MAX_BOOST - add)); if (n) { d.score += n; add += n; } }
+  if (add) { r.total = Math.max(r.total, Math.min(r.cap ?? 100, r.total + add)); r.boost = add; }   // a capped outfit stays capped
   return add;
 }
 // Whether a level can be sent for judging right now, without spending anything.
@@ -432,6 +434,36 @@ export function canSubmit(brief) {
   if (mode === 'hard' && !fabricRuns(brief.id).left) return { ok: false, reason: 'attempts' };
   if (!brief.tutorial && energy() < M.cost) return { ok: false, reason: 'energy' };
   return { ok: true };
+}
+const idsOf = (look) => Object.fromEntries(Object.entries(look).filter(([, v]) => v).map(([k, v]) => [k, v.id]));
+// Submit is final the moment it is tapped: the outfit is written down here, before the judging show, and submit()
+// settles it when the show ends. If the page is closed in between, settlePending() judges it the next time the game
+// opens, so leaving during the show never saves energy, a hard run or a loss.
+export function beginSubmit(look, brief) {
+  const chk = canSubmit(brief);
+  if (!chk.ok) return chk;
+  S.pending = { kind: 'story', id: brief.id, mode: brief.mode || 'normal', items: idsOf(wearable(look)), at: Date.now() };
+  save();
+  return { ok: true, token: S.pending.at, ...previewSubmit(look, brief) };
+}
+export const pendingToken = () => S.pending?.at ?? null;
+// Called once when the game opens. Returns what was settled, for a message, or null.
+export function settlePending() {
+  const p = S.pending, live = S.ranked.live;
+  S.pending = null;
+  let out = null;
+  try {
+    if (p && typeof p === 'object' && p.kind === 'ranked' && live) {
+      const m = rankedMatch(), res = finishRanked(hydrate(p.items), m);
+      if (res.ok) out = { kind: 'ranked', title: m.brief.title, passed: res.passed, grade: res.grade, delta: res.rewards.ranked.delta };
+    } else if (p && typeof p === 'object' && p.kind === 'story' && typeof p.id === 'string' && Object.hasOwn(LEVELS, p.id)) {
+      const b = levelBrief(p.id, Object.hasOwn(MODES, p.mode) ? p.mode : 'normal'), res = submit(hydrate(p.items), b);
+      if (res.ok) out = { kind: 'story', title: b.title, passed: res.passed, grade: res.grade };
+    }
+  } catch (e) { /* a damaged save: drop the pending outfit */ }
+  if (S.ranked.live) { const f = forfeitRanked(); if (f.ok && !out) out = { kind: 'forfeit', delta: f.delta }; }
+  save();
+  return out;
 }
 // The score and the rival the judging show starts from. Nothing is saved; submit() gives the same rival.
 export function previewSubmit(look, brief) {
@@ -497,6 +529,7 @@ export function submit(look, brief, extra = {}) {
   rewards.perfect = perfectCount(ch);
   S.history.unshift({ briefId: brief.id, title: brief.title, total: r.total, grade: r.grade, vs: opp.bot.name, margin, dims: Object.fromEntries(r.dims.map((d) => [d.key, d.score])), lead: r.lead, palette: r.palette, items: Object.fromEntries(Object.entries(look).filter(([, v]) => v).map(([k, v]) => [k, v.id])), date: Date.now(), mode });
   S.history = S.history.slice(0, 80);
+  S.pending = null;
   save();
   return { ...r, ok: true, passed, firstPass, rewards, pass: brief.pass };
 }
@@ -518,12 +551,12 @@ export function opponentFromLook(brief, items, who) {
 // A brief any player can be challenged on, whatever they have unlocked.
 export const battleBrief = (id) => (Object.hasOwn(LEVELS, id) && !LEVELS[id].secret && !LEVELS[id].pim ? { ...LEVELS[id], mode: 'normal', battle: true, tutorial: false, tolerance: LEVELS[id].tolerance ?? 1 } : null);
 
-// Ranked: eighteen steps from Bronze III to Master, 100 points each.
-const RANK_NAMES = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master'];
+// Ranked: sixteen steps, 100 points each, named the way fashion people talk: from a first Fit Check to Couture Legend.
+const RANK_NAMES = ['Fit Check', 'Trendsetter', 'It Girl', 'Main Character', 'Style Icon', 'Couture Legend'];
 export function rankOf(rp) {
   const step = Math.floor(rp / 100), tier = Math.min(5, Math.floor(step / 3));
   const div = tier === 5 ? '' : ['III', 'II', 'I'][step % 3];
-  return { rp, tier, name: RANK_NAMES[tier], div, label: tier === 5 ? 'Master' : `${RANK_NAMES[tier]} ${div}`, into: tier === 5 ? Math.min(100, rp - 1500) : rp % 100 };
+  return { rp, tier, name: RANK_NAMES[tier], div, label: tier === 5 ? RANK_NAMES[5] : `${RANK_NAMES[tier]} ${div}`, into: tier === 5 ? Math.min(100, rp - 1500) : rp % 100 };
 }
 export const RANKED = { cost: 6, seconds: 90, unlockAfter: 3 };
 export const ranked = () => S.ranked;
@@ -537,13 +570,47 @@ export function rankedMatch() {
   const rp = S.ranked.rp;
   const brief = { ...LEVELS[id], mode: 'normal', ranked: true, tutorial: false, pass: Math.round(Math.min(86, 54 + rp * 0.02)), tolerance: LEVELS[id].tolerance ?? 1 };
   const opp = opponentFor(brief, { level: Math.max(S.level, 4 + Math.floor(rp / 60)), skill: 68, mode: 'normal', attempt: 1000 + seed });
-  const k = hashStr(`boost:${seed}:${id}`) % opp.dims.length, d = opp.dims[k], n = Math.min(4, d.max - d.score);
+  // the rival boosts one line, and never past the ceiling every computer stylist has (88), so an S stays possible
+  const k = hashStr(`boost:${seed}:${id}`) % opp.dims.length, d = opp.dims[k], n = Math.min(4, d.max - d.score, 88 - opp.total);
   if (n > 0) { d.score += n; d.boost = n; opp.total += n; }
   const rivalRp = Math.max(0, rp + (hashStr(`rp:${seed}:${id}`) % 141) - 70);
-  return { brief, opp: { ...opp, rank: rankOf(rivalRp) } };
+  return { seed, brief, opp: { ...opp, rank: rankOf(rivalRp) } };
+}
+// A match begins here: the energy is paid and the match is written down, so it cannot be looked at and put back.
+// Leaving it (or closing the game) before an outfit is sent counts as a loss: see forfeitRanked().
+export function startRanked() {
+  if (!rankedUnlocked()) return { ok: false, reason: 'locked' };
+  if (S.ranked.live) forfeitRanked();
+  if (!spendEnergy(RANKED.cost)) return { ok: false, reason: 'energy' };
+  const m = rankedMatch(), deadline = Date.now() + RANKED.seconds * 1000;
+  S.ranked.live = { seed: m.seed, deadline };
+  save();
+  return { ok: true, ...m, deadline };
+}
+export const rankedLive = () => S.ranked.live;
+// The outfit for the live match was sent: kept until the judging show ends, like a story submit.
+export function beginRanked(look, match) {
+  const L = S.ranked.live;
+  if (!L || L.seed !== match.seed || L.seed !== S.ranked.played) return { ok: false, reason: 'stale' };
+  S.pending = { kind: 'ranked', id: match.brief.id, items: idsOf(wearable(look)), at: Date.now() };
+  save();
+  return { ok: true, token: S.pending.at };
+}
+export const FORFEIT_RP = 10;
+export function forfeitRanked() {
+  const R = S.ranked;
+  if (!R.live) return { ok: false };
+  const before = R.rp;
+  R.rp = Math.max(0, R.rp - FORFEIT_RP); R.played++; R.losses++; R.streak = 0; R.live = null;
+  if (S.pending?.kind === 'ranked') S.pending = null;
+  save();
+  return { ok: true, delta: R.rp - before };
 }
 export function finishRanked(look, match, bonus) {
-  if (!spendEnergy(RANKED.cost)) return { ok: false, reason: 'energy' };
+  // only the match that is live counts, and only once (a second tab, or a match finished twice, is refused)
+  const L = S.ranked.live;
+  if (!L || L.seed !== match.seed || L.seed !== S.ranked.played) return { ok: false, reason: 'stale' };
+  S.ranked.live = null; S.pending = null;
   const res = judgeAgainst(look, match.brief, match.opp, bonus);
   const m = res.rewards.margin, R = S.ranked, before = rankOf(R.rp);
   const delta = res.passed ? 18 + Math.min(10, Math.floor(m / 2)) + (R.streak >= 2 ? 4 : 0) : -Math.min(14, 8 + Math.floor(-m / 3));
@@ -595,32 +662,71 @@ export function saveLook(look, name, score, briefId) {
   S.looks = S.looks.slice(0, 40); save();
 }
 export function deleteLook(id) { S.looks = S.looks.filter((l) => l.id !== id); save(); }
-export const hydrate = (items) => Object.fromEntries(Object.entries(items).map(([k, id]) => [k, item(id)]).filter(([, v]) => v));
+// ids come from saves and from battle links, so only a real catalogue piece with that exact id is accepted
+export const hydrate = (items) => Object.fromEntries(Object.entries(items || {}).map(([k, id]) => [k, typeof id === 'string' ? item(id) : null]).filter(([k, v]) => v && typeof v === 'object' && v.slot === k));
 // the same, keeping only pieces the player still owns (a saved look may hold something that was dismantled since)
 export const hydrateOwned = (items) => Object.fromEntries(Object.entries(hydrate(items)).filter(([k, v]) => k === 'hair' || OWNED.has(v.id)));
 
-/* ---------------- capsule (honest blind box) ---------------- */
+/* ---------------- blind boxes (printed odds, no duplicates) ---------------- */
+// Three boxes. Each lists its own odds; a box never gives a piece the player already owns, so its pool shrinks with
+// every pull. The Pink Box is free once a day. An Icon piece is guaranteed by the twelfth pull without one.
+export const BOXES = {
+  pink: { id: 'pink', name: 'Pink Box', price: 30, freeDaily: true, odds: [['icon', 0.04], ['archive', 0.16], ['edit', 0.40], ['core', 0.40]] },
+  gold: { id: 'gold', name: 'Gold Box', price: 80, odds: [['icon', 0.12], ['archive', 0.38], ['edit', 0.50]] },
+  crystal: { id: 'crystal', name: 'Crystal Box', price: 180, odds: [['icon', 0.35], ['archive', 0.65]] },
+};
 export const CAPSULE = {
-  price: 30, pity: 12,
-  odds: [['icon', 0.04], ['archive', 0.16], ['edit', 0.40], ['core', 0.40]],
+  price: BOXES.pink.price, pity: 12, odds: BOXES.pink.odds,
   pool: () => CATALOG.filter((i) => i.slot !== 'hair' && i.slot !== 'makeup' && !i.set && (i.rarity !== 'core' || Math.abs(hashStr(i.id)) % 7 === 0)),
 };
-export function pullCapsule() {
-  if (S.thread < CAPSULE.price) return { ok: false, reason: 'funds' };
-  const pool = CAPSULE.pool();
-  const unowned = pool.filter((i) => !OWNED.has(i.id));
+export const boxPool = (boxId) => { const rar = new Set((Object.hasOwn(BOXES, boxId) ? BOXES[boxId] : BOXES.pink).odds.map(([r]) => r)); return CAPSULE.pool().filter((i) => rar.has(i.rarity)); };
+export const freePullReady = () => S.capsule.freeDay !== dayKey();
+export function pullCapsule(boxId = 'pink') {
+  const box = Object.hasOwn(BOXES, boxId) ? BOXES[boxId] : BOXES.pink;
+  const unowned = boxPool(box.id).filter((i) => !OWNED.has(i.id));
   if (!unowned.length) return { ok: false, reason: 'complete' };
-  S.thread -= CAPSULE.price; S.capsule.pulls++; S.capsule.sincePity++;
+  const free = !!box.freeDaily && freePullReady();
+  if (!free && S.thread < box.price) return { ok: false, reason: 'funds' };
+  if (free) S.capsule.freeDay = dayKey(); else S.thread -= box.price;
+  S.capsule.pulls++; S.capsule.sincePity++;
   let rarity;
   const hasIcon = unowned.some((i) => i.rarity === 'icon');
   if (S.capsule.sincePity >= CAPSULE.pity && hasIcon) rarity = 'icon';
-  else { let r = Math.random(); for (const [k, p] of CAPSULE.odds) { if (r < p && unowned.some((i) => i.rarity === k)) { rarity = k; break; } r -= p; } if (!rarity) rarity = unowned[0].rarity; }
+  else { let r = Math.random(); for (const [k, p] of box.odds) { if (r < p && unowned.some((i) => i.rarity === k)) { rarity = k; break; } r -= p; } if (!rarity) rarity = unowned[0].rarity; }
   const candidates = unowned.filter((i) => i.rarity === rarity);
   const src = candidates.length ? candidates : unowned;
   const got = src[Math.floor(Math.random() * src.length)];
   if (got.rarity === 'icon') S.capsule.sincePity = 0;
   OWNED.add(got.id); save();
-  return { ok: true, item: got, pity: CAPSULE.pity - S.capsule.sincePity };
+  return { ok: true, item: got, free, box: box.id, pity: Math.max(0, CAPSULE.pity - S.capsule.sincePity) };
+}
+
+/* ---------------- boosts for the judging show ---------------- */
+// Bought once with credits, then each has its own cooldown after it is used.
+export const BOOST_SHOP = {
+  catwalk: { id: 'catwalk', name: 'Catwalk', price: 500, cooldownMin: 5, lines: 3, plus: 2, hint: '+2 on each of the next 3 lines' },
+  aura: { id: 'aura', name: 'Aura', price: 800, cooldownMin: 8, lines: 1, plus: 4, hint: '+4 on the next line' },
+};
+export const MAX_BOOST = Object.values(BOOST_SHOP).reduce((a, b) => a + b.lines * b.plus, 0);
+export function boostState(id) {
+  const known = Object.hasOwn(BOOST_SHOP, id) && Object.hasOwn(S.boosts, id), b = known ? S.boosts[id] : null, d = known ? BOOST_SHOP[id] : null;
+  if (!b || !d) return { owned: false, ready: false, leftMs: 0 };
+  if (b.readyAt > Date.now() + d.cooldownMin * 60000) b.readyAt = Date.now() + d.cooldownMin * 60000;   // the device clock moved
+  const leftMs = Math.max(0, (b.readyAt || 0) - Date.now());
+  return { owned: !!b.owned, ready: !!b.owned && leftMs <= 0, leftMs };
+}
+export function buyBoost(id) {
+  const d = Object.hasOwn(BOOST_SHOP, id) && Object.hasOwn(S.boosts, id) ? BOOST_SHOP[id] : null;
+  if (!d) return { ok: false, reason: 'unknown' };
+  if (S.boosts[id].owned) return { ok: false, reason: 'owned' };
+  if (S.credits < d.price) return { ok: false, reason: 'funds', price: d.price };
+  S.credits -= d.price; S.boosts[id].owned = true; save();
+  return { ok: true, price: d.price };
+}
+export function useBoost(id) {
+  if (!boostState(id).ready) return false;
+  S.boosts[id].readyAt = Date.now() + BOOST_SHOP[id].cooldownMin * 60000; save();
+  return true;
 }
 
 /* ---------------- drops (limited sets in the atelier) ---------------- */
