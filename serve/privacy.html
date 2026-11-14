@@ -1,23 +1,34 @@
 <!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Privacy policy · Serve</title>
-<meta name="description" content="What Serve keeps on your device, what Stripe handles when you buy something, and what we never collect."><link rel="canonical" href="https://looksmap.github.io/serve/privacy.html">
+<meta name="description" content="What Serve keeps on your device, what is saved if you sign in, who handles payments, and what we never collect."><link rel="canonical" href="https://looksmap.github.io/serve/privacy.html">
 <link rel="icon" href="icons/icon-192.png"><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..600;1,8..60,400..600&display=swap" rel="stylesheet"><style>body{margin:0;font-family:Inter,-apple-system,system-ui,sans-serif;background:linear-gradient(180deg,#FFE4EF,#FFF6E8);color:#2A1420;min-height:100vh}main{max-width:640px;margin:0 auto;padding:32px 20px 80px}a{color:#B5135A}.k{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:rgba(42,20,32,.72)}h1{font-family:"Source Serif 4",Georgia,serif;font-weight:500;font-size:40px;line-height:1.05;margin:8px 0 10px;color:#B5135A}h2{font-family:"Source Serif 4",Georgia,serif;font-weight:500;font-size:24px;margin:28px 0 8px}p,li{font-size:17px;line-height:1.5}ul{padding-left:20px}.how{background:rgba(255,255,255,.6);border-radius:18px;padding:16px 18px;font-size:15px;line-height:1.5}footer{margin-top:40px;font-size:13px;color:rgba(42,20,32,.6)}</style></head><body><main>
 <p class="k">Serve · Privacy</p>
 <h1>Privacy policy</h1>
-<p>Serve is a styling game made by looksmap, Inc. This policy explains what happens to your information when you play Serve at looksmap.github.io/serve or install it to your home screen. Questions go to <a href="mailto:support@getlooksmap.com">support@getlooksmap.com</a>.</p>
+<p>Serve is a styling game made by looksmap, Inc. This policy explains what happens to your information when you play Serve at looksmap.github.io/serve, install it to your home screen, or use the Serve app for iPhone or Android. Questions go to <a href="mailto:support@getlooksmap.com">support@getlooksmap.com</a>.</p>
 
-<div class="how"><b>The short version.</b> Serve has no accounts. Your progress stays in your browser. We count anonymous statistics, such as how many people play and which levels they finish, without cookies and without anything that identifies you. If you buy something, Stripe handles the payment, and we receive a record of that purchase. We don’t show ads, sell your information, or track you on other sites.</div>
+<div class="how"><b>The short version.</b> You can play Serve without an account, and then your progress stays on your device. If you choose to sign in with Apple or Google, a copy of your progress is saved with an account ID so you can get it back on another device. We don’t keep your name or your email address. We count anonymous statistics, such as how many people play and which levels they finish, without cookies and without anything that identifies you. If you buy something, the payment is handled by Stripe on the website, or by the App Store or Google Play in the apps. We don’t show ads, sell your information, or track you on other sites.</div>
 
 <h2>What stays on your device</h2>
-<p>Serve saves these things in your browser’s storage on the device you play on. They are not sent to us or to GoatCounter.</p>
+<p>Serve saves these things in your browser’s storage, or in the app’s storage, on the device you play on. Unless you sign in, they are not sent to us. They are never sent to GoatCounter.</p>
 <ul>
 <li>Your progress: level, Thread, wardrobe, saved looks, the outfits you’ve entered and their scores.</li>
 <li>Your stylist: the look you pick and any name you type in.</li>
 <li>A random player ID, such as <i>p_k3x9…</i>. It isn’t linked to your name, email or device.</li>
-<li>A list of your purchases (the Stripe receipt number, item and price), so items aren’t added twice.</li>
+<li>A list of your purchases (the receipt or order number from Stripe, the App Store or Google Play, the item and the price), so items aren’t added twice.</li>
 <li>A log of your last 200 actions in the game, such as opening the shop or finishing a brief. It’s used for the You tab and stays on your device.</li>
 <li>How you first found Serve: the website or link that sent you, if your browser shares it.</li>
 </ul>
-<p>Clearing your browser data, or uninstalling the home-screen app, deletes all of this. We can’t see or restore it.</p>
+<p>Clearing your browser data, or uninstalling the app, deletes all of this from the device. Unless you signed in, we can’t see or restore it.</p>
+
+<h2>If you sign in</h2>
+<p>Signing in is optional. It exists so that your progress is not lost when you change phone or reinstall the game. You can sign in with Apple or with Google on the You tab.</p>
+<ul>
+<li><b>What Apple or Google sends.</b> When you sign in, Apple or Google gives our save service a signed token that proves which account signed in. Google’s token also contains your name and email address. Our service reads only the account ID from the token, checks that the token is genuine, and then discards it. We don’t ask Apple for your name or email.</li>
+<li><b>What we keep.</b> A one-way code made from the account ID, which we can’t turn back into the ID, and a copy of your saved game: your progress, your stylist, your random player ID and your list of purchases, as described above. We don’t keep your name, your email address or your password.</li>
+<li><b>What your device keeps.</b> A sign-in token for the save service, so you stay signed in for up to a year.</li>
+<li><b>Where it is kept.</b> On Cloudflare, which runs our save service and its database.</li>
+<li><b>How long.</b> Until you delete your account.</li>
+</ul>
+<p><b>Deleting your account.</b> Open the You tab and choose <i>Delete account</i>. This deletes the account record and the saved copy of your progress from our service straight away. It doesn’t delete the progress on your device. See <a href="delete-account.html">how to delete your account</a> if you no longer have the app.</p>
 
 <h2>Anonymous statistics</h2>
 <p>To see how many people play and which parts of the game work, Serve counts visits and game events with GoatCounter, a privacy-focused analytics service. Each time you open the game, GoatCounter receives:</p>
@@ -29,16 +40,21 @@
 <p>While you play, it also receives game events without any details about you: for example that a level was passed or failed, that the shop or checkout was opened, which item was bought, that a look was shared, or that the game was installed to a home screen.</p>
 <p>These statistics don’t use cookies and don’t include your name, the name you type for your stylist, your player ID, your email or your payment details. GoatCounter tells repeat visits apart for a short time using a hash it can’t reverse and doesn’t keep. We see only totals. See the <a href="https://www.goatcounter.com/help/privacy" target="_blank" rel="noopener">GoatCounter privacy policy</a>.</p>
 
-<h2>When you buy something</h2>
-<p>Purchases are made through Stripe, our payment processor. When you check out, you enter your payment details on Stripe’s own page, not in Serve. Stripe collects your card or wallet details, email address and billing country, and uses them under the <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe privacy policy</a>.</p>
+<h2>When you buy something on the website</h2>
+<p>Purchases on the website are made through Stripe, our payment processor. When you check out, you enter your payment details on Stripe’s own page, not in Serve. Stripe collects your card or wallet details, email address and billing country, and uses them under the <a href="https://stripe.com/privacy" target="_blank" rel="noopener">Stripe privacy policy</a>.</p>
 <p>We never see your full card number. From Stripe we receive a record of the purchase: the item, the amount, the date, your email address, your billing country, the last four digits and brand of the card, and your random player ID, so a purchase can be matched to the right game. We use this to deliver items, answer support requests, handle refunds and prevent fraud. We keep these records for as long as tax and accounting law requires.</p>
+
+<h2>When you buy something in the iPhone or Android app</h2>
+<p>Purchases in the apps are made through the App Store or Google Play, with the account on your phone. Apple or Google takes the payment and sends your receipt. We don’t receive your name, your email address or your payment details. The app keeps the store’s order number on your device so an item isn’t added twice. Refunds for these purchases are handled by Apple or Google.</p>
 
 <h2>Other services that see your device</h2>
 <ul>
-<li><b>GitHub Pages</b> hosts the game. Like any website host, it receives your IP address and browser details when you load a page. See the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">GitHub privacy statement</a>.</li>
+<li><b>GitHub Pages</b> hosts the website version of the game. Like any website host, it receives your IP address and browser details when you load a page. See the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">GitHub privacy statement</a>.</li>
 <li><b>Google Fonts</b> provides the game’s fonts, so Google receives your IP address and browser details when the fonts load. See the <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google privacy policy</a>.</li>
 <li><b>GoatCounter</b> receives the anonymous statistics described above.</li>
 <li><b>Cloudflare</b> runs our small payment service, which starts each Stripe checkout and confirms it afterwards. It receives your IP address, the item you chose and your random player ID. We don’t store them; see the <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">Cloudflare privacy policy</a>.</li>
+<li><b>Cloudflare</b> also runs the save service described under “If you sign in”. It receives your IP address when your progress is saved or loaded.</li>
+<li><b>Apple</b> or <b>Google</b>, only when you choose to sign in with them or buy something in the apps. See the <a href="https://www.apple.com/legal/privacy/" target="_blank" rel="noopener">Apple privacy policy</a> and the <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google privacy policy</a>.</li>
 <li><b>Stripe</b>, as above, only when you open a checkout page.</li>
 </ul>
 <p>Serve itself doesn’t set cookies. Stripe’s checkout pages use their own cookies for security and fraud prevention.</p>
@@ -47,14 +63,14 @@
 <p>When you share a look, the picture is made on your device and passed to your device’s share menu or clipboard. It goes only where you choose to send it. We don’t receive a copy.</p>
 
 <h2>Children</h2>
-<p>Serve is not directed at children under 13, and we don’t knowingly collect personal information from them. While playing, the game only sends the anonymous statistics described above, which can’t identify anyone. Buying something sends information to Stripe and to us, so purchases must be made by an adult cardholder or with a parent’s or guardian’s permission. If you believe a child under 13 has bought something in Serve, email us. We’ll refund it and delete what we hold about the purchase, except what the law requires us to keep.</p>
+<p>Serve is not directed at children under 13, and we don’t knowingly collect personal information from them. Signing in needs an Apple or Google account, which those companies offer to people aged 13 and over, or younger with a parent’s permission. While playing, the game only sends the anonymous statistics described above, which can’t identify anyone. Buying something sends information to Stripe and to us, so purchases must be made by an adult cardholder or with a parent’s or guardian’s permission. If you believe a child under 13 has bought something in Serve, email us. We’ll refund it and delete what we hold about the purchase, except what the law requires us to keep.</p>
 
 <h2>Your rights</h2>
-<p>Depending on where you live, you may have the right to ask what personal information we hold about you, to correct it, to delete it, or to object to how we use it. The only personal information we hold is the purchase records described above. To make a request, email <a href="mailto:support@getlooksmap.com">support@getlooksmap.com</a> from the address you used at checkout, or include your Stripe receipt number. We’ll reply within 30 days. You can also complain to your local data protection authority.</p>
+<p>Depending on where you live, you may have the right to ask what personal information we hold about you, to correct it, to delete it, or to object to how we use it. The only personal information we hold is the purchase records described above and, if you sign in, the saved game kept with your account ID. You can delete the saved game yourself on the You tab. To make any other request, email <a href="mailto:support@getlooksmap.com">support@getlooksmap.com</a> from the address you used at checkout, or include your Stripe receipt number. We’ll reply within 30 days. You can also complain to your local data protection authority.</p>
 
 <h2>Changes</h2>
 <p>If we change what Serve collects, for example by adding analytics that send information to us, we’ll update this page before the change goes live and change the date below.</p>
 
 <p style="margin-top:28px"><a href="./">Back to Serve</a> · <a href="refunds.html">Refund policy</a> · <a href="terms.html">Terms</a></p>
-<footer>Serve is made by looksmap, Inc. Last updated 12 November 2026.</footer>
+<footer>Serve is made by looksmap, Inc. Last updated 13 November 2026.</footer>
 </main></body></html>

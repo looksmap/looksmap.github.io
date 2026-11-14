@@ -18,6 +18,7 @@ import { playJudging } from './judging.js';
 import { gradeByMargin } from '../engine/bots.js';
 import { markSeen } from '../engine/state.js';
 import { shareVerdict, briefLink, copyLink, battleLink } from './share.js';
+import { CAN_LINK_OUT } from '../data/platform.js';
 import { backdropSVG } from './backdrops.js';
 import { boostState, useBoost } from '../engine/state.js';
 import { beginSubmit, pendingToken, judgeAgainst, opponentFromLook, battleBrief, levelBoard, finishRanked, beginRanked, forfeitRanked, rankedLive, RANKED, rankOf, ranked } from '../engine/state.js';
@@ -251,7 +252,7 @@ function resultsSheet(res, b) {
       <div class="vs-col them"><div class="vs-fig">${figure(hydrate(o.look), o.bot.avatar, { depth: true, shadow: false, viewBox: '60 0 240 560', pose: 'mirror' })}</div><b>${esc(b.pim ? `${o.bot.name}’s Pim` : o.bot.name)}</b><span class="n tier t-${gradeByMargin(-res.rewards.margin, o.total, b.pass)}">${gradeByMargin(-res.rewards.margin, o.total, b.pass)}</span></div>
     </div>
     <p class="muted small vs-note">${b.battle ? (res.passed ? `You beat ${esc(o.bot.name)}’s outfit! Send yours back and see if they can answer it.` : `${esc(o.bot.name)}’s outfit won this time. Restyle and try again, or send them a new challenge.`) : b.ranked ? (res.passed ? 'A ranked win. Keep the streak going for bonus points.' : 'A ranked loss costs a few points. The next match is a new brief and a new rival.') : res.passed ? (res.firstPass ? 'Cleared. The next level is open.' : b.tutorial ? 'Cleared again. The first level is for practice, so replays earn nothing.' : 'Cleared again. Replays pay 30% of the credits and sometimes give you a piece.') : `Beat ${esc(o.bot.name)} by a clear margin to earn an S. You still earned ${res.rewards.xp} XP for trying.`}</p>`; })()}
-    <div class="share-row"><button class="btn small primary" data-share-verdict>${icon('camera')} Share your result</button>${b.pim || b.secret || b.ranked ? '' : `<button class="btn small ghost" data-challenge>${icon('sparkle')} Challenge a friend</button>`}</div>
+    <div class="share-row"><button class="btn small primary" data-share-verdict>${icon('camera')} Share your result</button>${b.pim || b.secret || b.ranked || !CAN_LINK_OUT ? '' : `<button class="btn small ghost" data-challenge>${icon('sparkle')} Challenge a friend</button>`}</div>
     ${installNudge(s)}
     ${res.rewards.levelUps?.length ? res.rewards.levelUps.map((u) => `<div class="levelup">${OBJ.star(40)}<div><b>Level ${u.level}</b><span>Your energy now goes up to ${u.energyMax} and has been refilled. You also earned ${u.credits} credits${u.thread ? ` and ${u.thread} Thread` : ''}.</span></div></div>`).join('') : ''}
     ${res.passed && !b.battle ? `<div class="rewards"><div class="mono">You earned <b>${fmt(res.rewards.credits)} credits</b> · <b>${res.rewards.xp} XP</b>${res.rewards.thread ? ` · <b>${res.rewards.thread} Thread</b>` : ''}${sw.length ? ` · ${sw.map(([k, n]) => `${n} ${esc(k)}`).join(', ')}` : ''}${res.rewards.bonus.length ? `<span class="muted"> · ${res.rewards.bonus.map(esc).join(' · ')}</span>` : ''}</div>${rewardItems.map((it) => `<div class="reward-item"><div class="img">${thumb(it, s.avatar)}</div><div><div style="font-size:13px">${esc(it.name)}</div><div class="mono muted">${esc(SET_BY_ID[it.set]?.name || houseName(it.house))} · added to wardrobe</div></div></div>`).join('')}</div>` : ''}
@@ -358,7 +359,7 @@ function challengeLink(b) {
 }
 async function sendChallenge() {
   const b = resolveBrief();
-  if (b.pim || b.secret) { toast('This level cannot be sent as a battle.'); return; }
+  if (b.pim || b.secret || !CAN_LINK_OUT) { toast('This level cannot be sent as a battle.'); return; }
   if (!(look.dress || look.top)) { toast('Put on a top or a dress first'); return; }
   const url = challengeLink(b), who = state().avatar.name || 'A friend';
   const text = `${who} challenged you to a style battle on Serve: “${b.title}”. Can you beat this outfit?`;

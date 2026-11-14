@@ -80,6 +80,17 @@ export function save() {
 export const state = () => S;
 export const subscribe = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 export function reset() { S = fresh(); OWNED = new Set(S.owned); save(); }
+// Saved progress for a signed-in player (engine/account.js). The copy that travels is the same object the browser keeps.
+export const exportSave = () => { S.owned = [...OWNED]; return JSON.stringify(S); };
+export const saveSummary = () => ({ level: S.level, cleared: Object.values(S.results || {}).filter((r) => r && Object.values(r).some((m) => m && m.passed)).length, looks: (S.history || []).length, thread: S.thread, paid: (S.receipts || []).length });
+// True while nothing worth keeping has happened here, so a saved copy can replace it without asking.
+export const untouched = () => !(S.history || []).length && !(S.receipts || []).length && S.level === 1 && S.xp === 0;
+export function importSave(text) {
+  let got; try { got = typeof text === 'string' ? JSON.parse(text) : text; } catch (e) { return false; }
+  if (!got || typeof got !== 'object' || Array.isArray(got)) return false;
+  S = mergeSave(fresh(), got); OWNED = new Set([...(Array.isArray(S.owned) ? S.owned : []), ...STARTER_IDS]); save();
+  return true;
+}
 
 /* ---------------- energy ---------------- */
 export function energy() {

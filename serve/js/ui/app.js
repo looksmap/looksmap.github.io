@@ -1,7 +1,8 @@
 // Tiny router, shell updates, shared helpers.
 import { tierOf, dimTier } from '../engine/score.js';
 import { track, captureSource, standalone, isIOS } from '../engine/track.js';
-import { handleReturn } from '../engine/payments.js';
+import { handleReturn, loadStorePrices, recoverStorePurchases } from '../engine/payments.js';
+import { STORE_NAME, PLATFORM } from '../data/platform.js';
 import { USD, state, subscribe, nextOpenLevel, DROPS, energy, ENERGY, energyEtaMin, CHAPTERS, chapterCleared, storageOK } from '../engine/state.js';
 import { HOUSES } from '../data/catalog.js';
 import { injectSprite, icon } from './icons.js';
@@ -105,6 +106,11 @@ export function countUp(el, to, ms = 800) {
   requestAnimationFrame(tick);
 }
 
+// The sheet that says what happened to a purchase: added, already added, still waiting, or not added.
+export function showPurchase(r) {
+  overlay(`<div class="sheet-wrap" role="dialog" aria-label="Purchase"><div class="scrim" data-close-sheet></div><aside class="sheet confirm"><button class="close" data-close-sheet>Close ×</button><div class="eyebrow">${r.ok ? 'Thank you' : 'Purchase'}</div><h2 class="display display-m">${r.ok ? (r.repeat ? 'Already added' : 'Added to your wallet') : r.pending ? 'Not confirmed yet' : 'Not added'}</h2><p>${esc(r.text || '')}</p>${r.ok && !r.repeat && r.usd ? `<p class="muted small">${r.store ? `Your receipt is in your account with ${STORE_NAME}.` : `${USD(r.usd)}${r.verified ? ' · confirmed by Stripe' : ''}. Your receipt is in your email.`}</p>` : ''}<div class="sheet-actions"><button class="btn primary block" data-close-sheet>Done</button></div></aside></div>`);
+}
+
 export function init() {
   injectSprite($('#device'));
   for (const a of $$('#nav a')) { const k = a.dataset.route; const names = { map: 'map', studio: 'studio', wardrobe: 'wardrobe', atelier: 'atelier', you: 'you' }; a.innerHTML = `${icon(names[k] || 'map')}<span>${a.textContent.trim()}</span>`; }
@@ -120,7 +126,11 @@ export function init() {
     if (!r) return;
     renderWallet(); renderTicker(); rerender();
     if (r.cancelled) { toast('Checkout cancelled. Nothing was charged.'); return; }
-    overlay(`<div class="sheet-wrap" role="dialog" aria-label="Purchase"><div class="scrim" data-close-sheet></div><aside class="sheet confirm"><button class="close" data-close-sheet>Close ×</button><div class="eyebrow">${r.ok ? 'Thank you' : 'Purchase'}</div><h2 class="display display-m">${r.ok ? (r.repeat ? 'Already added' : 'Added to your wallet') : r.pending ? 'Not confirmed yet' : 'Not added'}</h2><p>${esc(r.text || '')}</p>${r.ok && !r.repeat && r.usd ? `<p class="muted small">${USD(r.usd)}${r.verified ? ' · confirmed by Stripe' : ''}. Your receipt is in your email.</p>` : ''}<div class="sheet-actions"><button class="btn primary block" data-close-sheet>Done</button></div></aside></div>`);
+    showPurchase(r);
   }).catch(() => {});
+  // In the store apps: show the store's own prices, and add anything the store was paid for that the game has not added.
+  loadStorePrices().then((ok) => { if (ok) rerender(); }).catch(() => {});
+  recoverStorePurchases().then((r) => { if (r) { renderWallet(); renderTicker(); rerender(); showPurchase(r); } }).catch(() => {});
+  document.documentElement.dataset.platform = PLATFORM;
   setInterval(() => { renderTicker(); renderWallet(); }, 60000);
 }

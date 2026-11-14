@@ -1,9 +1,10 @@
 // The verdict as an image: two figures, two tiers, the result, Ro's line, and the link to the brief. 1080×1350, the
 // portrait size TikTok, Reels and Stories keep whole. Shares as a file where the browser allows it, downloads otherwise.
 import { track } from '../engine/track.js';
+import { publicBase, CAN_LINK_OUT, native } from '../data/platform.js';
 
 const W = 1080, H = 1350;
-export function briefLink(levelId, mode = 'normal') { const u = new URL(location.href); u.search = ''; u.hash = `play/${levelId}${mode && mode !== 'normal' ? '/' + mode : ''}`; return u.toString(); }
+export function briefLink(levelId, mode = 'normal') { const u = new URL(publicBase()); u.hash = `play/${levelId}${mode && mode !== 'normal' ? '/' + mode : ''}`; return u.toString(); }
 function svgImage(svg, w, h) {
   return new Promise((res, rej) => {
     const withNs = svg.includes('xmlns=') ? svg : svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ');
@@ -38,7 +39,7 @@ export async function verdictCard({ youSvg, themSvg, name, rival, yourTier, thei
   ctx.fillStyle = '#2A1420'; ctx.font = '500 56px "Source Serif 4", Georgia, serif'; ctx.fillText(word, 540, 1140);
   ctx.fillStyle = '#B5135A'; ctx.font = 'italic 500 40px "Source Serif 4", Georgia, serif'; ctx.textAlign = 'left';
   wrap(ctx, `“${line}”`, 72, 1210, W - 144, 50, 2);
-  ctx.fillStyle = 'rgba(42,20,32,.72)'; ctx.font = '600 28px Inter, system-ui, sans-serif'; ctx.fillText('Style this brief yourself: ' + link.replace(/^https?:\/\//, ''), 72, 1310);
+  ctx.fillStyle = 'rgba(42,20,32,.72)'; ctx.font = '600 28px Inter, system-ui, sans-serif'; if (CAN_LINK_OUT) ctx.fillText('Style this brief yourself: ' + link.replace(/^https?:\/\//, ''), 72, 1310);
   return new Promise((res) => c.toBlob(res, 'image/png', 0.92));
 }
 export async function shareVerdict(opts) {
@@ -46,13 +47,16 @@ export async function shareVerdict(opts) {
   const file = new File([blob], 'serve-verdict.png', { type: 'image/png' });
   const text = `${opts.word} against ${opts.rival} on “${opts.brief}”. ${opts.line}`;
   track('share', { brief: opts.brief, tier: opts.yourTier });
+  // Android's web view cannot share a picture itself, so the app does it.
+  const n = native();
+  if (n && n.shareImage && !(navigator.canShare && navigator.canShare({ files: [file] }))) { if (await n.shareImage(blob, text, opts.link)) return 'shared'; }
   try {
-    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text, url: opts.link }); return 'shared'; }
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share(CAN_LINK_OUT ? { files: [file], text, url: opts.link } : { files: [file], text }); return 'shared'; }
   } catch (e) { if (e && e.name === 'AbortError') return 'cancelled'; }
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'serve-verdict.png'; document.body.appendChild(a); a.click(); a.remove();
-  try { await navigator.clipboard.writeText(opts.link); } catch (e) { /* clipboard may be blocked */ }
+  try { if (CAN_LINK_OUT) await navigator.clipboard.writeText(opts.link); } catch (e) { /* clipboard may be blocked */ }
   return 'downloaded';
 }
 // A battle link carries the sender's outfit for one brief; the friend who opens it styles the same brief against it.
-export function battleLink(levelId, payload) { const u = new URL(location.href); u.search = ''; u.hash = `battle/${levelId}/${payload}`; return u.toString(); }
+export function battleLink(levelId, payload) { const u = new URL(publicBase()); u.hash = `battle/${levelId}/${payload}`; return u.toString(); }
 export async function copyLink(link) { try { await navigator.clipboard.writeText(link); return true; } catch (e) { return false; } }

@@ -1324,3 +1324,15 @@ h1, h2, h3, .display, .lt, .wordmark, .btn, .chip, .story-name, .tier, .versus .
 .judge-board .nm, .ladder .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ladder .rk { white-space: nowrap; font-size: 12px; }
 .judge-boost:focus-visible, .judge-skip:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+/* ---------- sign-in and saved progress (You tab) ---------- */
+.account .account-btns { display: grid; gap: 10px; margin-top: 12px; }
+.account .account-btns.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.account .signin-apple { background: #000; color: #fff; border-color: #000; min-height: 44px; }
+.account .signin-google { background: #fff; color: #1f1f1f; border: 1px solid #747775; min-height: 44px; }
+.account .gslot { min-height: 44px; display: flex; justify-content: center; font-size: 13px; }
+/* store apps and portals: no text selection or long-press menus on game surfaces */
+:root[data-platform="ios"] body, :root[data-platform="android"] body, :root[data-platform="portal"] body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+:root[data-platform="ios"] input, :root[data-platform="android"] input, :root[data-platform="portal"] input { -webkit-user-select: text; user-select: text; }
+/* the status bar and the camera cut-out sit over the page in the phone apps; keep the top bar below them */
+.device { padding-top: env(safe-area-inset-top); }

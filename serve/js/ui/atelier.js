@@ -1,6 +1,6 @@
 // The shop. Thread is the paid currency; everything has a printed price and nothing is a surprise.
 // Prototype rule: tapping Buy on a dollar item adds the goods and records the price. No payment is taken.
-import { route, esc, fmt, houseName, toast, overlay, closeOverlay, rerender, timeLeft, renderTicker, renderWallet } from './app.js';
+import { route, esc, fmt, houseName, toast, overlay, closeOverlay, rerender, timeLeft, renderTicker, renderWallet, showPurchase } from './app.js';
 import { SETS, REFILL_LADDER, setProgress, hydrate, state, buy, owns, item, threadPrice, DROPS, buyDropSet, dropSetPrice, storageOK, CAPSULE, pullCapsule, BOXES, boxPool, freePullReady, BOOST_SHOP, boostState, buyBoost, energy, ENERGY, maxEnergy, SET_BY_ID, SWATCHES, CHAPTERS, nextOpenLevel,
   THREAD_TIERS, DAILY_BUNDLE, MONTHLY, FABRIC_PACK, CREDIT_PACKS, GIFT_WINDOWS, SIGNIN, USD, buyThread, buyDailyBundle, dailyBundleBought, buyMonthly, monthlyActive, monthlyDaysLeft, monthlyClaimable, claimMonthly,
   refillPrice, refillsBoughtToday, refillEnergy, fabricPacksLeft, buyFabric, buyCredits, giftState, claimGift, signinState, signIn, spentUSD, energyEtaMin, fabricRuns, resetFabricRun, FABRIC_RUNS, LEVELS } from '../engine/state.js';
@@ -11,7 +11,8 @@ import { renderLook } from '../render/figure.js';
 import { icon } from './icons.js';
 import { OBJ } from './objects.js';
 import { track } from '../engine/track.js';
-import { paymentsMode, paymentsEnv, startCheckout, skuFor, purchaseHistory } from '../engine/payments.js';
+import { paymentsMode, paymentsEnv, startCheckout, skuFor, purchaseHistory, selling, priceOf } from '../engine/payments.js';
+import { STORE, STORE_NAME } from '../data/platform.js';
 
 let tab = 'capsule';
 let lastPull = null;
@@ -77,7 +78,7 @@ function todayView(s) {
   const hero = todayHero(s);
   const parts = bundleBreakdown();
   const sep = usdForThread(parts.reduce((a, x) => a + x.thread, 0));
-  return `<section class="bundle today">
+  return `${!selling() ? '' : `<section class="bundle today">
     <div class="bundle-hero">${hero.svg}<span class="bundle-cap">${esc(hero.caption)}</span></div>
     <div class="bundle-body">
       <div class="kicker">${icon('sparkle')} ${bought ? 'Bought · back at 00:00' : '1 of 1 today · resets 00:00'}</div>
@@ -89,11 +90,11 @@ function todayView(s) {
         <li>${OBJ.star(18, '#5FC9C0')} ${DAILY_BUNDLE.tickets} fabric-run tickets, any level</li>
         <li>${OBJ.spool(18)} ${DAILY_BUNDLE.thread} Thread</li>
       </ul>
-      <details class="anchor"><summary>Sold separately in this shop: ${USD(sep)}</summary><ul>${parts.map((x) => `<li><span>${esc(x.what)}</span><span class="num">${x.thread} Thread</span></li>`).join('')}<li><span>Thread at the ${USD(THREAD_TIERS.find((t) => t.thread >= parts.reduce((a, x) => a + x.thread, 0))?.usd || THREAD_TIERS[5].usd)} pack rate</span><span class="num">${USD(sep)}</span></li></ul></details>
-      <button class="btn primary block" data-shop-buy="daily" ${bought ? 'disabled' : ''}>${bought ? 'Bought today' : `Buy today’s edit · ${USD(DAILY_BUNDLE.usd)}`}</button>
+      ${STORE === 'native' ? '' : `<details class="anchor"><summary>Sold separately in this shop: ${USD(sep)}</summary><ul>${parts.map((x) => `<li><span>${esc(x.what)}</span><span class="num">${x.thread} Thread</span></li>`).join('')}<li><span>Thread at the ${USD(THREAD_TIERS.find((t) => t.thread >= parts.reduce((a, x) => a + x.thread, 0))?.usd || THREAD_TIERS[5].usd)} pack rate</span><span class="num">${USD(sep)}</span></li></ul></details>`}
+      <button class="btn primary block" data-shop-buy="daily" ${bought ? 'disabled' : ''}>${bought ? 'Bought today' : `Buy today’s edit · ${priceOf('daily')}`}</button>
       <p class="muted small">Without it, fabric is three free hard-mode runs per level a day. Energy still returns on its own.</p>
     </div>
-  </section>
+  </section>`}
 
   <section class="panel signin">
     <div class="panel-title">${icon('check')} Sign in · day ${si.day + 1} of 7</div>
@@ -107,21 +108,22 @@ function todayView(s) {
     <p class="muted small">Your local time. Energy also comes back on its own, one every ${ENERGY.regenMs / 60000} minutes, and refills when you level up.</p>
   </section>
 
-  <section class="panel monthly">
+  ${!selling() ? '' : `<section class="panel monthly">
     <div class="panel-title">${icon('star')} Thirty days, dressed daily</div>
-    <div class="monthly-row">${OBJ.card(48)}<div><b>${MONTHLY.daily} Thread every day you open the app. ${MONTHLY.now} now.</b><span class="muted small">${monthlyActive() ? `${monthlyDaysLeft()} days left` : `${USD(MONTHLY.usd)} for ${MONTHLY.days} days · sold separately: about ${USD(usdForThread(MONTHLY.now + MONTHLY.daily * MONTHLY.days))} of Thread`}</span></div></div>
-    <div class="row">${monthlyActive() ? `<button class="btn ${monthlyClaimable() ? 'primary' : 'ghost'}" data-claim-monthly ${monthlyClaimable() ? '' : 'disabled'}>${monthlyClaimable() ? `Claim today's ${MONTHLY.daily}` : 'Claimed today'}</button><button class="btn ghost" data-shop-buy="monthly">Extend · ${USD(MONTHLY.usd)}</button>` : `<button class="btn primary" data-shop-buy="monthly">Start 30 days · ${USD(MONTHLY.usd)}</button>`}</div>
-  </section>`;
+    <div class="monthly-row">${OBJ.card(48)}<div><b>${MONTHLY.daily} Thread every day you open the app. ${MONTHLY.now} now.</b><span class="muted small">${monthlyActive() ? `${monthlyDaysLeft()} days left` : `${priceOf('monthly')} for ${MONTHLY.days} days${STORE === 'native' ? '' : ` · sold separately: about ${USD(usdForThread(MONTHLY.now + MONTHLY.daily * MONTHLY.days))} of Thread`}`}</span></div></div>
+    <div class="row">${monthlyActive() ? `<button class="btn ${monthlyClaimable() ? 'primary' : 'ghost'}" data-claim-monthly ${monthlyClaimable() ? '' : 'disabled'}>${monthlyClaimable() ? `Claim today's ${MONTHLY.daily}` : 'Claimed today'}</button><button class="btn ghost" data-shop-buy="monthly">Extend · ${priceOf('monthly')}</button>` : `<button class="btn primary" data-shop-buy="monthly">Start 30 days · ${priceOf('monthly')}</button>`}</div>
+  </section>`}`;
 }
 
 /* ---------- Thread ---------- */
 function threadView(s) {
+  if (!selling()) return `<section class="panel"><div class="panel-title">${icon('spool')} Thread</div><p class="muted small">Thread is not sold in this version of the game. You earn it by signing in for seven days, finishing a set, and clearing a chapter.</p></section>`;
   return `<section class="panel">
     <div class="panel-title">${icon('spool')} Thread</div>
     <p class="muted small">Every tier doubles on your first purchase. Once. It never resets.</p>
-    <div class="tiers">${(() => { const bestId = THREAD_TIERS.reduce((b, t) => (t.thread / t.usd > b.thread / b.usd ? t : b)).id; return THREAD_TIERS.map((t, i) => { const first = !s.shop.firstBuy[t.id]; const got = first ? t.thread * 2 : t.thread; return `<button class="tier ${first ? 'first' : ''} ${t.id === bestId ? 'best' : ''}" data-shop-buy="thread:${t.id}">${t.id === bestId ? '<span class="ribbon">Best rate</span>' : first ? '<span class="ribbon two">2× first time</span>' : ''}${OBJ.spool(28 + i * 5)}<b class="num">${fmt(got)}</b>${first ? `<span class="was num">${fmt(t.thread)} + ${fmt(t.thread)} bonus</span>` : `<span class="was">≈ ${Math.floor(got / CAPSULE.price)} capsule pulls</span>`}<span class="price">${USD(t.usd)}</span></button>`; }).join(''); })()}</div>
+    <div class="tiers">${(() => { const bestId = THREAD_TIERS.reduce((b, t) => (t.thread / t.usd > b.thread / b.usd ? t : b)).id; return THREAD_TIERS.map((t, i) => { const first = !s.shop.firstBuy[t.id]; const got = first ? t.thread * 2 : t.thread; return `<button class="tier ${first ? 'first' : ''} ${t.id === bestId ? 'best' : ''}" data-shop-buy="thread:${t.id}">${t.id === bestId ? '<span class="ribbon">Best rate</span>' : first ? '<span class="ribbon two">2× first time</span>' : ''}${OBJ.spool(28 + i * 5)}<b class="num">${fmt(got)}</b>${first ? `<span class="was num">${fmt(t.thread)} + ${fmt(t.thread)} bonus</span>` : `<span class="was">≈ ${Math.floor(got / CAPSULE.price)} capsule pulls</span>`}<span class="price">${priceOf(t.id)}</span></button>`; }).join(''); })()}</div>
   </section>
-  ${paymentsMode() === 'prototype' ? `<section class="panel"><div class="panel-title">${icon('info')} About payments in this prototype</div><p class="muted small">Buy adds the Thread and records the price so the pacing is real. No card, no charge. Recorded so far: ${USD(spentUSD())}.</p></section>` : `<section class="panel"><div class="panel-title">${icon('info')} Payments</div><p class="muted small">Checkout is handled by Stripe${paymentsEnv() === 'test' ? ' in test mode: nothing is really charged yet' : ''}. Receipts go to the email you give Stripe. Purchases are added the moment you come back; if one is missing, write to support with the receipt.</p>${purchaseHistory().length ? `<ul class="receipts">${purchaseHistory().slice(0, 6).map((r) => `<li><span>${esc(new Date(r.at).toLocaleDateString())}</span><span>${esc(r.sku.startsWith('t') ? 'Thread' : r.sku === 'daily' ? 'Today’s edit' : 'Monthly card')}</span><span class="num">${USD(r.usd)}</span></li>`).join('')}</ul>` : ''}</section>`}`;
+  ${paymentsMode() === 'prototype' ? `<section class="panel"><div class="panel-title">${icon('info')} About payments in this prototype</div><p class="muted small">Buy adds the Thread and records the price so the pacing is real. No card, no charge. Recorded so far: ${USD(spentUSD())}.</p></section>` : STORE === 'native' ? `<section class="panel"><div class="panel-title">${icon('info')} Payments</div><p class="muted small">Purchases are made through ${STORE_NAME}, with the account on this phone. They are added as soon as the store approves them. Receipts and refunds are handled by ${STORE_NAME}.</p></section>` : `<section class="panel"><div class="panel-title">${icon('info')} Payments</div><p class="muted small">Checkout is handled by Stripe${paymentsEnv() === 'test' ? ' in test mode: nothing is really charged yet' : ''}. Receipts go to the email you give Stripe. Purchases are added the moment you come back; if one is missing, write to support with the receipt.</p>${purchaseHistory().length ? `<ul class="receipts">${purchaseHistory().slice(0, 6).map((r) => `<li><span>${esc(new Date(r.at).toLocaleDateString())}</span><span>${esc(r.sku.startsWith('t') ? 'Thread' : r.sku === 'daily' ? 'Today’s edit' : 'Monthly card')}</span><span class="num">${USD(r.usd)}</span></li>`).join('')}</ul>` : ''}</section>`}`;
 }
 
 /* ---------- Energy and fabric ---------- */
@@ -262,9 +264,9 @@ function confirmSheet(key) {
     <div class="eyebrow">${d.usd != null ? 'Purchase' : 'Spend Thread'}</div>
     <h2 class="display display-m">${esc(d.title)}</h2>
     <ul class="notes">${d.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
-    <div class="confirm-price">${d.usd != null ? USD(d.usd) : `${d.thread} ${icon('spool')} Thread`}</div>
-    ${d.usd != null ? (paymentsMode(skuFor(key)) === 'prototype' ? '<p class="muted small">Prototype: nothing is charged. You receive the items and the price is recorded.</p>' : `<p class="muted small">Secure checkout by Stripe: Apple Pay, Google Pay or a card. You come straight back here and the items are added.${paymentsEnv() === 'test' ? ' Test mode: no real charge; use card 4242 4242 4242 4242.' : ''}</p><p class="muted small">Items are delivered as soon as you pay, so purchases are final once added, except as set out in the <a href="refunds.html" target="_blank" rel="noopener">refund policy</a>. See the <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a> for what Stripe and we receive. Buying means you agree to the <a href="terms.html" target="_blank" rel="noopener">terms</a>.</p>`) : ''}
-    <div class="sheet-actions"><button class="btn primary block" data-confirm="${esc(key)}">${d.usd != null && paymentsMode(skuFor(key)) !== 'prototype' ? `Pay ${USD(d.usd)}` : 'Confirm'}</button><button class="btn ghost block" data-close-sheet>Not now</button></div>
+    <div class="confirm-price">${d.usd != null ? priceOf(skuFor(key)) : `${d.thread} ${icon('spool')} Thread`}</div>
+    ${d.usd != null ? (paymentsMode(skuFor(key)) === 'prototype' ? '<p class="muted small">Prototype: nothing is charged. You receive the items and the price is recorded.</p>' : STORE === 'native' ? `<p class="muted small">Payment is taken by ${STORE_NAME} from the account on this phone, and the items are added as soon as it is approved.</p><p class="muted small">Purchases are final once added. Refunds for purchases made in this app are handled by ${STORE_NAME}. See the <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a> and the <a href="terms.html" target="_blank" rel="noopener">terms</a>.</p>` : `<p class="muted small">Secure checkout by Stripe: Apple Pay, Google Pay or a card. You come straight back here and the items are added.${paymentsEnv() === 'test' ? ' Test mode: no real charge; use card 4242 4242 4242 4242.' : ''}</p><p class="muted small">Items are delivered as soon as you pay, so purchases are final once added, except as set out in the <a href="refunds.html" target="_blank" rel="noopener">refund policy</a>. See the <a href="privacy.html" target="_blank" rel="noopener">privacy policy</a> for what Stripe and we receive. Buying means you agree to the <a href="terms.html" target="_blank" rel="noopener">terms</a>.</p>`) : ''}
+    <div class="sheet-actions"><button class="btn primary block" data-confirm="${esc(key)}">${d.usd != null && paymentsMode(skuFor(key)) !== 'prototype' ? `Pay ${priceOf(skuFor(key))}` : 'Confirm'}</button><button class="btn ghost block" data-close-sheet>Not now</button></div>
   </aside></div>`;
 }
 export function offerSheet(reason = 'energy') {
@@ -278,13 +280,13 @@ export function offerSheet(reason = 'energy') {
   const waitMin = Math.max(eta, 1) + (ENERGY.cost - 1) * (ENERGY.regenMs / 60000);
   return `<div class="sheet-wrap" role="dialog" aria-label="Out of energy"><div class="scrim" data-close-sheet></div><aside class="sheet offer">
     <button class="close" data-close-sheet>Close ×</button>
-    <div class="offer-head">${OBJ.energyJar(56)}<div><div class="eyebrow">${ENERGY.cost} energy to the next attempt</div><h2 class="display display-m">${reason === 'energy' ? 'Out of energy.' : 'Keep going.'}</h2><p class="muted small">Three ways back in. Two are free.</p></div></div>
+    <div class="offer-head">${OBJ.energyJar(56)}<div><div class="eyebrow">${ENERGY.cost} energy to the next attempt</div><h2 class="display display-m">${reason === 'energy' ? 'Out of energy.' : 'Keep going.'}</h2><p class="muted small">${selling() ? 'Three ways back in. Two are free.' : 'Here are the ways back in.'}</p></div></div>
     <div class="offer-opts">
       <button class="opt free" data-close-sheet>${OBJ.bolt(30)}<span><b>Wait ${waitMin} min</b><small>One energy every ${ENERGY.regenMs / 60000} minutes, and a full refill every time you level up</small></span></button>
       ${nextGift.claimable ? `<button class="opt free" data-gift="${nextGift.id}" data-from-sheet>${OBJ.gift(30, '#5FC9C0')}<span><b>Claim +${nextGift.energy} free</b><small>The ${String(nextGift.from).padStart(2, '0')}:00 to ${String(nextGift.to).padStart(2, '0')}:00 gift is open now</small></span></button>` : `<div class="opt free">${OBJ.gift(30, '#5FC9C0')}<span><b>+${nextGift.energy} free at ${String(nextGift.from).padStart(2, '0')}:00</b><small>Two gift windows a day, your local time</small></span></div>`}
       <button class="opt" data-refill ${s.thread >= price ? '' : 'disabled'}>${OBJ.energyJar(30)}<span><b>Refill to ${maxEnergy()} · ${price} Thread</b><small>${s.thread < price ? `You have ${s.thread}. ` : ''}Today’s ladder: ${REFILL_LADDER.map((p, i) => (i === nToday ? `[${p}]` : p)).join(' · ')}</small></span></button>
-      <button class="opt" data-shop-buy="daily" ${bought ? 'disabled' : ''}>${OBJ.gift(30)}<span><b>Today’s edit · ${USD(DAILY_BUNDLE.usd)}</b><small>${bought ? 'Bought today' : `Energy to full, ${DAILY_BUNDLE.swatches} swatches, ${DAILY_BUNDLE.tickets} fabric runs, ${DAILY_BUNDLE.thread} Thread`}</small></span></button>
-      <a class="opt" href="#atelier" data-close-sheet>${OBJ.spool(30)}<span><b>Thread</b><small>From ${USD(THREAD_TIERS[0].usd)}. Every tier doubles the first time.</small></span></a>
+      ${!selling() ? '' : `<button class="opt" data-shop-buy="daily" ${bought ? 'disabled' : ''}>${OBJ.gift(30)}<span><b>Today’s edit · ${priceOf('daily')}</b><small>${bought ? 'Bought today' : `Energy to full, ${DAILY_BUNDLE.swatches} swatches, ${DAILY_BUNDLE.tickets} fabric runs, ${DAILY_BUNDLE.thread} Thread`}</small></span></button>
+      <a class="opt" href="#atelier" data-close-sheet>${OBJ.spool(30)}<span><b>Thread</b><small>From ${priceOf('t1')}. Every tier doubles the first time.</small></span></a>`}
     </div>
   </aside></div>`;
 }
@@ -296,12 +298,12 @@ export function runsSheet(levelId) {
   const bought = dailyBundleBought();
   return `<div class="sheet-wrap" role="dialog" aria-label="No runs left"><div class="scrim" data-close-sheet></div><aside class="sheet offer">
     <button class="close" data-close-sheet>Close ×</button>
-    <div class="offer-head">${OBJ.fabric(56, '#F7A8C9')}<div><div class="eyebrow">Fabric runs · ${esc(lv.title)} · ${fr.used} of ${fr.allowance} used</div><h2 class="display display-m">No runs left today.</h2><p class="muted small">Three ways back in. One is free.</p></div></div>
+    <div class="offer-head">${OBJ.fabric(56, '#F7A8C9')}<div><div class="eyebrow">Fabric runs · ${esc(lv.title)} · ${fr.used} of ${fr.allowance} used</div><h2 class="display display-m">No runs left today.</h2><p class="muted small">${selling() ? 'Three ways back in. One is free.' : 'Here are the ways back in.'}</p></div></div>
     <div class="offer-opts">
       <div class="opt free">${OBJ.star(30, '#5FC9C0')}<span><b>Tomorrow</b><small>${fr.free} free runs per level come back at midnight</small></span></div>
       <button class="opt" data-reset-run="${levelId}" data-from-studio ${s.thread >= fr.resetPrice && fr.canReset ? '' : 'disabled'}>${OBJ.spool(30)}<span><b>Reset this level</b><small>${fr.resetPrice} Thread · ${fr.resets} of ${fr.maxResets} resets used today</small></span></button>
-      <button class="opt" data-reset-ticket="${levelId}" data-from-studio ${fr.tickets > 0 && fr.canReset ? '' : 'disabled'}>${OBJ.star(30)}<span><b>Use a ticket</b><small>${fr.tickets} ticket${fr.tickets === 1 ? '' : 's'} · ${DAILY_BUNDLE.tickets} come in today’s edit</small></span></button>
-      <button class="opt" data-shop-buy="daily" ${bought ? 'disabled' : ''}>${OBJ.gift(30)}<span><b>Today’s edit · ${USD(DAILY_BUNDLE.usd)}</b><small>${bought ? 'Bought today' : `${DAILY_BUNDLE.tickets} fabric runs, ${DAILY_BUNDLE.swatches} swatches, energy to full, ${DAILY_BUNDLE.thread} Thread`}</small></span></button>
+      <button class="opt" data-reset-ticket="${levelId}" data-from-studio ${fr.tickets > 0 && fr.canReset ? '' : 'disabled'}>${OBJ.star(30)}<span><b>Use a ticket</b><small>${fr.tickets} ticket${fr.tickets === 1 ? '' : 's'}${selling() ? ` · ${DAILY_BUNDLE.tickets} come in today’s edit` : ''}</small></span></button>
+      ${!selling() ? '' : `<button class="opt" data-shop-buy="daily" ${bought ? 'disabled' : ''}>${OBJ.gift(30)}<span><b>Today’s edit · ${priceOf('daily')}</b><small>${bought ? 'Bought today' : `${DAILY_BUNDLE.tickets} fabric runs, ${DAILY_BUNDLE.swatches} swatches, energy to full, ${DAILY_BUNDLE.thread} Thread`}</small></span></button>`}
     </div>
   </aside></div>`;
 }
@@ -313,8 +315,14 @@ function execute(key) {
   track('purchase_attempt', { kind });
   if (['daily', 'monthly', 'thread'].includes(kind) && paymentsMode(skuFor(key)) !== 'prototype') {
     if (!storageOK) { toast('This browser is not saving progress, so purchases are turned off here.', 4200); closeOverlay(); return; }
-    const btn = document.querySelector(`[data-confirm="${key}"]`); if (btn) { btn.disabled = true; btn.textContent = 'Opening Stripe…'; }
-    startCheckout(skuFor(key)).catch(() => { toast('Could not open checkout. Try again in a moment.'); closeOverlay(); });
+    if (paymentsMode() === 'off') { closeOverlay(); return; }
+    const btn = document.querySelector(`[data-confirm="${key}"]`); if (btn) { btn.disabled = true; btn.textContent = `Opening ${STORE_NAME}…`; }
+    // The website leaves for Stripe here. The store apps stay on this screen and come back with the result.
+    startCheckout(skuFor(key)).then((res) => {
+      if (!res || typeof res !== 'object') return;
+      closeOverlay(); renderWallet(); renderTicker(); rerender();
+      if (res.cancelled) toast('Purchase cancelled. Nothing was charged.'); else showPurchase(res);
+    }).catch(() => { toast('Could not open checkout. Try again in a moment.'); closeOverlay(); });
     return;
   }
   if (kind === 'daily') { r = buyDailyBundle(ch.swatches); toast(r.ok ? `Today’s edit added: energy, fabric, ${DAILY_BUNDLE.thread} Thread` : 'Already bought today'); }
